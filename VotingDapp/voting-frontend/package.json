@@ -1,0 +1,18 @@
+{
+  "name": "voting-frontend",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "vite build",
+    "preview": "vite preview"
+  },
+  "devDependencies": {
+    "vite": "^8.0.1"
+  },
+  "dependencies": {
+    "ethers": "^6.16.0",
+    "react-router-dom": "^7.13.2"
+  }
+}
