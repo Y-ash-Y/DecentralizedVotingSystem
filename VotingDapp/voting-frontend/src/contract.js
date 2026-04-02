@@ -12,13 +12,13 @@ export const CONTRACT_ABI = [
   "function endElection(uint _electionId)",
   "function vote(uint _electionId, uint _candidateId)",
   "function getCandidateVotes(uint _electionId, uint _candidateId) view returns (uint)",
-  "event ElectionCreated(uint indexed electionId, string name)",
-  "event AdminAssigned(uint indexed electionId, address admin)",
-  "event CandidateAdded(uint indexed electionId, uint candidateId, string name)",
-  "event VoterAuthorized(uint indexed electionId, address voter)",
-  "event VoteCast(uint indexed electionId, address voter)",
-  "event ElectionStarted(uint indexed electionId)",
-  "event ElectionEnded(uint indexed electionId)",
+  "event ElectionCreated(uint electionId, string name)",
+  "event AdminAssigned(uint electionId, address admin)",
+  "event CandidateAdded(uint electionId, uint candidateId, string name)",
+  "event VoterAuthorized(uint electionId, address voter)",
+  "event VoteCast(uint electionId, address voter)",
+  "event ElectionStarted(uint electionId)",
+  "event ElectionEnded(uint electionId)",
 ];
 
 export const SEPOLIA_CHAIN_ID = 11155111;
