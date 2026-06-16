@@ -1,5 +1,14 @@
-# Node modules
-/node_modules
+# Node modules (any depth — not just root)
+node_modules/
+
+# Secrets — never commit
+.env
+.env.local
+.env.*.local
+*.key
+
+# OS files
+.DS_Store
 
 # Compilation output
 /dist
