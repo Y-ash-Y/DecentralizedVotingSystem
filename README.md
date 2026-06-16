@@ -62,7 +62,8 @@ This project implements a decentralized election system where:
 - One vote per wallet enforcement
 - Role-based access control (Admin vs Voter)
 - Blockchain immutability ensures no tampering
-- Designed for future **commit-reveal voting** (privacy enhancement)
+- **Commit-reveal voting** for ballot privacy — opt-in per election (commit a hashed vote, reveal it in a separate phase)
+- Tested with a Hardhat suite (`npm test`) covering access control, the election lifecycle, double-vote prevention, and the commit-reveal flow
 
 ---
 

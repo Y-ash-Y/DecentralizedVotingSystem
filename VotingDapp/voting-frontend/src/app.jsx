@@ -87,7 +87,7 @@ function SectionTitle({ children, action }) {
 }
 
 function Badge({ label, color }) {
-  const map = { active:"#238636", ended:"#6e7681", created:"#8a6800" };
+  const map = { active:"#238636", ended:"#6e7681", created:"#8a6800", reveal:"#1d4ed8" };
   const c   = map[color] || color;
   return (
     <span style={{ background:c+"22", color:c, padding:"2px 9px", borderRadius:12, fontSize:11, fontWeight:600 }}>
@@ -246,6 +246,7 @@ function Topbar({ account, isAdmin, view, onSwitchView, onDisconnect }) {
 function ElectionSidebar({
   elections, selElection, onSelect, onRefresh,
   showCreate, elName, onElNameChange, onCreate, loading,
+  crMode, onToggleCrMode,
   hideEnded, onToggleHideEnded,
 }) {
   const visible = hideEnded ? elections.filter(e=>e.state!=="ended") : elections;
@@ -269,8 +270,15 @@ function ElectionSidebar({
               fontSize:13, outline:"none", boxSizing:"border-box", marginBottom:8,
             }}
           />
+          <div style={{ display:"flex", alignItems:"center", gap:6, marginBottom:10 }}>
+            <input type="checkbox" id="crMode" checked={crMode} onChange={onToggleCrMode}
+              style={{ cursor:"pointer", accentColor:C.gold }}/>
+            <label htmlFor="crMode" style={{ fontSize:12, color:C.muted, cursor:"pointer", lineHeight:1.4 }}>
+              Private election (commit-reveal) — voters submit a hidden vote, then reveal it after a separate reveal phase
+            </label>
+          </div>
           <Btn variant="primary" onClick={onCreate} disabled={loading||!elName} full>
-            Create Election
+            Create {crMode ? "Private " : ""}Election
           </Btn>
         </div>
       )}
@@ -365,12 +373,13 @@ export default function App() {
   const [hasVoted,    setHasVoted]    = useState(false);
 
   // ── Forms — note: onChange handlers use stable `set*` functions from useState ──
-  const [elName,          setElName]          = useState("");
-  const [candName,        setCandName]        = useState("");
-  const [voterAddr,       setVoterAddr]       = useState("");
-  const [selCandId,       setSelCandId]       = useState("");
-  const [useCommitReveal, setUseCommitReveal] = useState(false);
-  const [voteSecret,      setVoteSecret]      = useState("");
+  const [elName,       setElName]       = useState("");
+  const [candName,     setCandName]     = useState("");
+  const [voterAddr,    setVoterAddr]    = useState("");
+  const [selCandId,    setSelCandId]    = useState("");
+  const [crMode,       setCrMode]       = useState(false); // new election: commit-reveal?
+  const [voteSecret,   setVoteSecret]   = useState("");
+  const [hasCommitted, setHasCommitted] = useState(false); // commit-reveal: this wallet committed
 
   const pollRef = useRef(null);
 
@@ -455,27 +464,33 @@ export default function App() {
       const rc        = await getReadContract();
       const fromBlock = await getFromBlock();
 
-      const [created, started, ended, voteEvents] = await Promise.all([
+      const [created, started, revealed, ended, voteEvents, revealEvents] = await Promise.all([
         rc.queryFilter(rc.filters.ElectionCreated(), fromBlock, "latest"),
         rc.queryFilter(rc.filters.ElectionStarted(), fromBlock, "latest"),
+        rc.queryFilter(rc.filters.RevealStarted(),   fromBlock, "latest"),
         rc.queryFilter(rc.filters.ElectionEnded(),   fromBlock, "latest"),
         rc.queryFilter(rc.filters.VoteCast(),        fromBlock, "latest"),
+        rc.queryFilter(rc.filters.VoteRevealed(),    fromBlock, "latest"),
       ]);
 
-      const startedIds = new Set(started.map(e => e.args.electionId.toString()));
-      const endedIds   = new Set(ended.map(e   => e.args.electionId.toString()));
+      const startedIds = new Set(started.map(e  => e.args.electionId.toString()));
+      const revealIds  = new Set(revealed.map(e => e.args.electionId.toString()));
+      const endedIds   = new Set(ended.map(e    => e.args.electionId.toString()));
 
-      // Count votes per election
+      // Count votes per election (plain VoteCast + revealed commit-reveal votes)
       const voteCounts = {};
-      voteEvents.forEach(e => {
+      [...voteEvents, ...revealEvents].forEach(e => {
         const id = e.args.electionId.toString();
         voteCounts[id] = (voteCounts[id]||0) + 1;
       });
 
       const list = created.map(e => {
         const id    = e.args.electionId.toString();
-        const state = endedIds.has(id) ? "ended" : startedIds.has(id) ? "active" : "created";
-        return { id, name:e.args.name, state, totalVotes: voteCounts[id]??0 };
+        const state = endedIds.has(id)   ? "ended"
+                    : revealIds.has(id)  ? "reveal"
+                    : startedIds.has(id) ? "active"
+                    : "created";
+        return { id, name:e.args.name, state, commitReveal: e.args.commitReveal, totalVotes: voteCounts[id]??0 };
       });
 
       setElections(list);
@@ -527,14 +542,23 @@ export default function App() {
     } catch(err) { console.error("loadResults:", err); }
   }, [candidates]);
 
-  const checkHasVoted = useCallback(async (electionId, addr) => {
+  // Tracks, for the connected wallet: has it voted (plain VoteCast or a revealed
+  // commit-reveal vote), and — for commit-reveal — has it committed yet.
+  const checkVoteStatus = useCallback(async (electionId, addr) => {
     try {
       const rc        = await getReadContract();
       const fromBlock = await getFromBlock();
-      const all       = await rc.queryFilter(rc.filters.VoteCast(), fromBlock, "latest");
-      const events    = all.filter(e => e.args.electionId.toString()===electionId.toString());
-      setHasVoted(events.some(e => e.args.voter.toLowerCase()===addr.toLowerCase()));
-    } catch { setHasVoted(false); }
+      const [cast, committed, revealed] = await Promise.all([
+        rc.queryFilter(rc.filters.VoteCast(),      fromBlock, "latest"),
+        rc.queryFilter(rc.filters.VoteCommitted(), fromBlock, "latest"),
+        rc.queryFilter(rc.filters.VoteRevealed(),  fromBlock, "latest"),
+      ]);
+      const mine = ev => ev
+        .filter(e => e.args.electionId.toString()===electionId.toString())
+        .some(e => e.args.voter.toLowerCase()===addr.toLowerCase());
+      setHasVoted(mine(cast) || mine(revealed));
+      setHasCommitted(mine(committed));
+    } catch { setHasVoted(false); setHasCommitted(false); }
   }, []);
 
   // ── Connect ────────────────────────────────────────────────────────────────
@@ -568,26 +592,29 @@ export default function App() {
 
   // ── Select election ────────────────────────────────────────────────────────
   const selectElection = async (el) => {
-    setSelElection(el); setResults([]); setSelCandId("");
+    setSelElection(el); setResults([]); setSelCandId(""); setVoteSecret("");
     const cands = await fetchCandidates(el.id);
     await fetchVoters(el.id);
     if (el.state==="ended") await doLoadResults(el.id, cands);
-    if (account)            await checkHasVoted(el.id, account);
+    if (account)            await checkVoteStatus(el.id, account);
   };
 
   const handleSwitchView = async (v) => {
     setView(v);
     if (v==="voter" && selElection) {
       await fetchCandidates(selElection.id);
-      await checkHasVoted(selElection.id, account);
+      await checkVoteStatus(selElection.id, account);
     }
   };
 
   // ── Admin actions ──────────────────────────────────────────────────────────
   const handleCreateElection = async () => {
     const c = await getSignerContract();
-    const r = await sendTx(() => c.createElection(elName, 0, 9999999999), `Election "${elName}" created`);
-    if (r) { setElName(""); await sleep(1500); await fetchElections(); }
+    const r = await sendTx(
+      () => c.createElection(elName, 0, 9999999999, crMode),
+      `${crMode ? "Private election" : "Election"} "${elName}" created`
+    );
+    if (r) { setElName(""); setCrMode(false); await sleep(1500); await fetchElections(); }
   };
 
   const handleAddCandidate = async () => {
@@ -607,9 +634,23 @@ export default function App() {
   const handleStart = async () => {
     if (!selElection) { setStatus("❌ Select an election first"); return; }
     const c = await getSignerContract();
-    const r = await sendTx(() => c.startElection(Number(selElection.id)), "Election started — voting is open");
+    const msg = selElection.commitReveal
+      ? "Election started — commit phase is open"
+      : "Election started — voting is open";
+    const r = await sendTx(() => c.startElection(Number(selElection.id)), msg);
     if (r) {
       const u = { ...selElection, state:"active" };
+      setSelElection(u);
+      setElections(prev => prev.map(e => e.id===selElection.id ? u : e));
+    }
+  };
+
+  const handleStartReveal = async () => {
+    if (!selElection) { setStatus("❌ Select an election first"); return; }
+    const c = await getSignerContract();
+    const r = await sendTx(() => c.startReveal(Number(selElection.id)), "Reveal phase started — voters can now reveal their votes");
+    if (r) {
+      const u = { ...selElection, state:"reveal" };
       setSelElection(u);
       setElections(prev => prev.map(e => e.id===selElection.id ? u : e));
     }
@@ -628,23 +669,66 @@ export default function App() {
     }
   };
 
-  // ── Vote ───────────────────────────────────────────────────────────────────
+  // ── Vote (plain elections) ───────────────────────────────────────────────────
   const handleVote = async () => {
     if (!selElection||!selCandId) { setStatus("❌ Select a candidate first"); return; }
     if (hasVoted) { setStatus("❌ Already voted in this election"); return; }
-    if (useCommitReveal) {
-      // DEMO ONLY: the deployed contract has no commitVote/revealVote functions,
-      // so this generates the cryptographic commitment hash but does NOT cast a
-      // vote on-chain. See report §5.4 (Commit-Reveal Prototype) / Future Work.
-      const secret     = voteSecret || Math.random().toString(36).slice(2);
-      const commitment = ethers.keccak256(ethers.toUtf8Bytes(`${selCandId}:${secret}`));
-      setVoteSecret(secret);
-      setStatus(`⏳ DEMO — commitment ${commitment.slice(0,18)}… generated. No vote was recorded. Uncheck Privacy mode to cast a real vote.`);
-      return;
-    }
     const c = await getSignerContract();
     const r = await sendTx(() => c.vote(Number(selElection.id), Number(selCandId)), "Vote cast — permanently recorded on Ethereum");
     if (r) { setHasVoted(true); setSelCandId(""); }
+  };
+
+  // localStorage key so a committed vote can be re-loaded for the reveal step.
+  const crKey = (electionId, addr) => `vc_cr_${CONTRACT_ADDRESS}_${electionId}_${(addr||"").toLowerCase()}`;
+
+  // ── Commit-reveal phase 1 — commit a hidden vote ─────────────────────────────
+  const handleCommit = async () => {
+    if (!selElection||!selCandId) { setStatus("❌ Select a candidate first"); return; }
+    if (hasCommitted) { setStatus("❌ Already committed in this election"); return; }
+    const secret     = voteSecret || (Math.random().toString(36).slice(2) + Math.random().toString(36).slice(2));
+    const commitment = ethers.solidityPackedKeccak256(
+      ["uint256", "string", "address"], [Number(selCandId), secret, account]
+    );
+    const c = await getSignerContract();
+    const r = await sendTx(
+      () => c.commitVote(Number(selElection.id), commitment),
+      "Vote committed — save your secret to reveal it after the reveal phase opens"
+    );
+    if (r) {
+      try { localStorage.setItem(crKey(selElection.id, account), JSON.stringify({ candidateId:selCandId, secret })); } catch {}
+      setVoteSecret(secret);
+      setHasCommitted(true);
+    }
+  };
+
+  // ── Commit-reveal phase 2 — reveal the committed vote ────────────────────────
+  const handleReveal = async () => {
+    if (!selElection||!selCandId) { setStatus("❌ Select the candidate you committed to"); return; }
+    if (!voteSecret) { setStatus("❌ Enter your secret phrase"); return; }
+    if (hasVoted) { setStatus("❌ Already revealed in this election"); return; }
+    const c = await getSignerContract();
+    const r = await sendTx(
+      () => c.revealVote(Number(selElection.id), Number(selCandId), voteSecret),
+      "Vote revealed and counted on Ethereum"
+    );
+    if (r) {
+      try { localStorage.removeItem(crKey(selElection.id, account)); } catch {}
+      setHasVoted(true);
+    }
+  };
+
+  // Pre-fill the reveal form from a locally-saved commitment, if present.
+  const loadSavedCommitment = () => {
+    try {
+      const raw = localStorage.getItem(crKey(selElection.id, account));
+      if (raw) {
+        const { candidateId, secret } = JSON.parse(raw);
+        setSelCandId(candidateId); setVoteSecret(secret);
+        setStatus("✅ Loaded your saved commitment — confirm below to reveal");
+      } else {
+        setStatus("⏳ No saved commitment on this device — enter your candidate and secret manually");
+      }
+    } catch { setStatus("❌ Could not read saved commitment"); }
   };
 
   // ── Statistics card ────────────────────────────────────────────────────────
@@ -717,6 +801,8 @@ export default function App() {
       onElNameChange={e => setElName(e.target.value)}
       onCreate={handleCreateElection}
       loading={loading}
+      crMode={crMode}
+      onToggleCrMode={e => setCrMode(e.target.checked)}
       hideEnded={hideEnded}
       onToggleHideEnded={e => setHideEnded(e.target.checked)}
     />
@@ -751,7 +837,8 @@ export default function App() {
                   <h2 style={{ fontSize:20, fontWeight:700, color:C.text, marginBottom:6 }}>{selElection.name}</h2>
                   <div style={{ display:"flex", gap:8, alignItems:"center" }}>
                     {selElection.state==="active" && <span style={{ width:7,height:7,borderRadius:"50%",background:"#3fb950",display:"inline-block" }}/>}
-                    <Badge label={selElection.state} color={selElection.state}/>
+                    <Badge label={selElection.state==="active"&&selElection.commitReveal ? "commit" : selElection.state} color={selElection.state}/>
+                    {selElection.commitReveal && <Badge label="🔒 private" color={C.blue}/>}
                     <span style={{ fontSize:11, fontFamily:C.mono, color:C.muted }}>ID #{selElection.id}</span>
                   </div>
                 </div>
@@ -759,7 +846,13 @@ export default function App() {
                   {selElection.state==="created" && (
                     <Btn variant="success" onClick={handleStart} disabled={loading}>▶ Start Election</Btn>
                   )}
-                  {selElection.state==="active" && (
+                  {selElection.state==="active" && selElection.commitReveal && (
+                    <Btn variant="info" onClick={handleStartReveal} disabled={loading}>🔓 Start Reveal Phase</Btn>
+                  )}
+                  {selElection.state==="active" && !selElection.commitReveal && (
+                    <Btn variant="danger" onClick={()=>setConfirmEnd(true)} disabled={loading}>⏹ End Election</Btn>
+                  )}
+                  {selElection.state==="reveal" && (
                     <Btn variant="danger" onClick={()=>setConfirmEnd(true)} disabled={loading}>⏹ End Election</Btn>
                   )}
                 </div>
@@ -875,6 +968,13 @@ export default function App() {
   );
 
   // ── Voter view ─────────────────────────────────────────────────────────────
+  // Can the voter still pick a candidate? Commit phase (CR) blocks once committed;
+  // plain voting and the reveal phase block once the vote is recorded.
+  const canPick = !!selElection && (
+    selElection.state==="active"
+      ? (selElection.commitReveal ? !hasCommitted : !hasVoted)
+      : selElection.state==="reveal" && selElection.commitReveal && !hasVoted
+  );
   if (view==="voter") return (
     <div style={{ background:C.bg, minHeight:"100vh" }}>
       {topbar}
@@ -892,8 +992,10 @@ export default function App() {
                 <h2 style={{ fontSize:20, fontWeight:700, color:C.text, marginBottom:6 }}>{selElection.name}</h2>
                 <div style={{ display:"flex", gap:8, alignItems:"center" }}>
                   {selElection.state==="active" && <span style={{ width:7,height:7,borderRadius:"50%",background:"#3fb950",display:"inline-block" }}/>}
-                  <Badge label={selElection.state} color={selElection.state}/>
-                  {selElection.state==="active"  && <span style={{ fontSize:12, color:C.muted }}>Voting is open</span>}
+                  <Badge label={selElection.state==="active"&&selElection.commitReveal ? "commit" : selElection.state} color={selElection.state}/>
+                  {selElection.commitReveal && <Badge label="🔒 private" color={C.blue}/>}
+                  {selElection.state==="active"  && <span style={{ fontSize:12, color:C.muted }}>{selElection.commitReveal ? "Commit phase open — submit a hidden vote" : "Voting is open"}</span>}
+                  {selElection.state==="reveal"  && <span style={{ fontSize:12, color:C.muted }}>Reveal phase — reveal your committed vote</span>}
                   {selElection.state==="created" && <span style={{ fontSize:12, color:C.muted }}>Voting has not started yet</span>}
                   {selElection.state==="ended"   && <span style={{ fontSize:12, color:C.muted }}>Election closed</span>}
                 </div>
@@ -926,16 +1028,16 @@ export default function App() {
                     <thead><tr>
                       <th style={{ textAlign:"left", padding:8, color:C.muted, fontSize:11, borderBottom:`1px solid ${C.border}` }}>ID</th>
                       <th style={{ textAlign:"left", padding:8, color:C.muted, fontSize:11, borderBottom:`1px solid ${C.border}` }}>Candidate</th>
-                      {selElection.state==="active" && !hasVoted && <th style={{ padding:8, borderBottom:`1px solid ${C.border}` }}/>}
+                      {canPick && <th style={{ padding:8, borderBottom:`1px solid ${C.border}` }}/>}
                     </tr></thead>
                     <tbody>
                       {candidates.map(c => (
                         <tr key={c.id}
-                          onClick={()=>selElection.state==="active"&&!hasVoted&&setSelCandId(c.id)}
+                          onClick={()=>canPick&&setSelCandId(c.id)}
                           style={{
                             borderBottom:`1px solid ${C.border}22`,
                             background:selCandId===c.id?C.gold+"11":"transparent",
-                            cursor:selElection.state==="active"&&!hasVoted?"pointer":"default",
+                            cursor:canPick?"pointer":"default",
                             transition:"background .1s",
                           }}
                         >
@@ -943,7 +1045,7 @@ export default function App() {
                           <td style={{ padding:"11px 8px", fontWeight:selCandId===c.id?600:400, color:selCandId===c.id?C.gold:C.text }}>
                             {c.name}{selCandId===c.id?" ← selected":""}
                           </td>
-                          {selElection.state==="active" && !hasVoted && (
+                          {canPick && (
                             <td style={{ padding:"11px 8px", textAlign:"right" }}>
                               <Btn size="sm" variant={selCandId===c.id?"primary":"ghost"}
                                 onClick={ev=>{ev.stopPropagation();setSelCandId(c.id);}}>
@@ -958,8 +1060,8 @@ export default function App() {
                 )}
               </Card>
 
-              {/* Vote action */}
-              {selElection.state==="active" && (
+              {/* Plain voting */}
+              {selElection.state==="active" && !selElection.commitReveal && (
                 <Card>
                   <SectionTitle>Cast Your Vote</SectionTitle>
                   {hasVoted ? (
@@ -975,36 +1077,81 @@ export default function App() {
                       <div style={{ marginBottom:14, padding:12, background:C.surface2, borderRadius:8, fontSize:13 }}>
                         Voting for: <strong style={{ color:C.gold }}>{candidates.find(c=>c.id===selCandId)?.name}</strong>
                         <div style={{ color:C.muted, fontSize:11, marginTop:4 }}>
-                          {useCommitReveal
-                            ? "Privacy mode is a demo — it will generate a commitment hash only, not record a vote."
-                            : "Once submitted, your vote is permanently recorded on Ethereum and cannot be changed."}
+                          Once submitted, your vote is permanently recorded on Ethereum and cannot be changed.
                         </div>
                       </div>
-                      <div style={{ marginBottom:12, display:"flex", alignItems:"center", gap:8 }}>
-                        <input type="checkbox" id="cr" checked={useCommitReveal}
-                          onChange={e=>setUseCommitReveal(e.target.checked)} style={{ cursor:"pointer", accentColor:C.gold }}/>
-                        <label htmlFor="cr" style={{ fontSize:12, color:C.muted, cursor:"pointer" }}>
-                          Privacy mode (commit-reveal) — <strong style={{ color:C.gold }}>demo only:</strong> generates a commitment hash; does <strong>not</strong> record a vote yet
-                        </label>
-                      </div>
-                      {useCommitReveal && (
-                        <>
-                          <div style={{ marginBottom:12, padding:"10px 12px", background:C.gold+"14", border:`1px solid ${C.gold}44`, borderRadius:8, fontSize:12, color:C.gold, lineHeight:1.6 }}>
-                            ⚠ <strong>Demonstration only.</strong> This shows the cryptographic commitment step but does <strong>not</strong> cast a vote — the deployed contract has no commit/reveal functions yet. Uncheck Privacy mode to record a real vote.
-                          </div>
-                          <RawInput label="Secret phrase (auto-generated if blank)" placeholder="your-secret-phrase"
-                            value={voteSecret} onChange={e=>setVoteSecret(e.target.value)} mono
-                            hint="Save this — you would need it to reveal your vote once the contract supports it."/>
-                        </>
-                      )}
-                      <Btn variant="primary" size="lg" onClick={handleVote} disabled={loading}>
-                        {useCommitReveal ? "🔒 Generate Commitment (demo)" : "🗳 Cast Vote"}
-                      </Btn>
-                      {voteSecret && useCommitReveal && (
-                        <div style={{ marginTop:12, padding:10, background:C.surface2, borderRadius:8, fontFamily:C.mono, fontSize:11, color:C.gold }}>
-                          Secret: {voteSecret}
+                      <Btn variant="primary" size="lg" onClick={handleVote} disabled={loading}>🗳 Cast Vote</Btn>
+                    </>
+                  )}
+                </Card>
+              )}
+
+              {/* Commit-reveal — phase 1: commit */}
+              {selElection.state==="active" && selElection.commitReveal && (
+                <Card>
+                  <SectionTitle>Commit Your Vote (Private)</SectionTitle>
+                  {hasCommitted ? (
+                    <div style={{ fontSize:13, color:C.green, lineHeight:1.7 }}>
+                      🔒 Your hidden vote is committed on-chain. When the admin opens the reveal phase, come back here to reveal it.
+                      {voteSecret && (
+                        <div style={{ marginTop:10, padding:10, background:C.surface2, borderRadius:8, fontFamily:C.mono, fontSize:11, color:C.gold, wordBreak:"break-all" }}>
+                          Secret (save this): {voteSecret}
                         </div>
                       )}
+                    </div>
+                  ) : !selCandId ? (
+                    <div style={{ color:C.muted, fontSize:13 }}>
+                      Select a candidate above, then commit a hashed vote. Your choice stays hidden on-chain until you reveal it later.
+                    </div>
+                  ) : (
+                    <>
+                      <div style={{ marginBottom:12, padding:"10px 12px", background:C.blue+"14", border:`1px solid ${C.blue}44`, borderRadius:8, fontSize:12, color:"#93b4ff", lineHeight:1.6 }}>
+                        Your vote is hashed with a secret before being sent, so no one can see your choice on-chain during voting. You reveal the secret after the commit phase closes to have it counted.
+                      </div>
+                      <div style={{ marginBottom:14, padding:12, background:C.surface2, borderRadius:8, fontSize:13 }}>
+                        Committing to: <strong style={{ color:C.gold }}>{candidates.find(c=>c.id===selCandId)?.name}</strong>
+                      </div>
+                      <RawInput label="Secret phrase (auto-generated if blank)" placeholder="your-secret-phrase"
+                        value={voteSecret} onChange={e=>setVoteSecret(e.target.value)} mono
+                        hint="Saved in this browser for the reveal step — but keep your own copy too."/>
+                      <Btn variant="primary" size="lg" onClick={handleCommit} disabled={loading}>🔒 Commit Vote</Btn>
+                    </>
+                  )}
+                </Card>
+              )}
+
+              {/* Commit-reveal — phase 2: reveal */}
+              {selElection.state==="reveal" && selElection.commitReveal && (
+                <Card>
+                  <SectionTitle action={<Btn size="sm" variant="ghost" onClick={loadSavedCommitment}>Load saved</Btn>}>
+                    Reveal Your Vote
+                  </SectionTitle>
+                  {hasVoted ? (
+                    <div style={{ color:C.green, fontSize:13 }}>
+                      ✅ Your vote has been revealed and counted on Ethereum.
+                    </div>
+                  ) : !hasCommitted ? (
+                    <div style={{ color:C.muted, fontSize:13 }}>
+                      You did not commit a vote during the commit phase, so there is nothing to reveal.
+                    </div>
+                  ) : (
+                    <>
+                      <div style={{ marginBottom:12, padding:"10px 12px", background:C.blue+"14", border:`1px solid ${C.blue}44`, borderRadius:8, fontSize:12, color:"#93b4ff", lineHeight:1.6 }}>
+                        Reveal the candidate and secret you committed to. The contract re-hashes them and only counts your vote if they match your original commitment. "Load saved" fills these in if you committed on this browser.
+                      </div>
+                      <div style={{ marginBottom:6, fontSize:11, fontWeight:600, color:C.muted, textTransform:"uppercase", letterSpacing:"0.08em" }}>
+                        Candidate you committed to
+                      </div>
+                      <div style={{ marginBottom:12 }}>
+                        {candidates.map(c => (
+                          <Btn key={c.id} size="sm" variant={selCandId===c.id?"primary":"ghost"} onClick={()=>setSelCandId(c.id)}>
+                            {c.name}
+                          </Btn>
+                        ))}
+                      </div>
+                      <RawInput label="Secret phrase" placeholder="the secret you used to commit"
+                        value={voteSecret} onChange={e=>setVoteSecret(e.target.value)} mono/>
+                      <Btn variant="success" size="lg" onClick={handleReveal} disabled={loading||!selCandId||!voteSecret}>🔓 Reveal Vote</Btn>
                     </>
                   )}
                 </Card>

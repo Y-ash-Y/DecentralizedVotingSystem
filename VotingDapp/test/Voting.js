@@ -4,6 +4,14 @@ const { expect } = require("chai");
 const START = 0;
 const END = 9999999999;
 
+// Mirror of the on-chain commitment: keccak256(abi.encodePacked(candidateId, secret, voter)).
+function commitmentFor(candidateId, secret, voter) {
+  return ethers.utils.solidityKeccak256(
+    ["uint256", "string", "address"],
+    [candidateId, secret, voter]
+  );
+}
+
 describe("VotingSystem", function () {
   let voting;
   let superAdmin, electionAdmin, voter1, voter2, outsider;
@@ -27,28 +35,34 @@ describe("VotingSystem", function () {
 
   describe("createElection", function () {
     it("lets the super admin create an election and emits ElectionCreated", async function () {
-      await expect(voting.createElection("Council 2025", START, END))
+      await expect(voting.createElection("Council 2025", START, END, false))
         .to.emit(voting, "ElectionCreated")
-        .withArgs(1, "Council 2025");
+        .withArgs(1, "Council 2025", false);
       expect(await voting.electionCount()).to.equal(1);
+    });
+
+    it("flags commit-reveal elections in the event", async function () {
+      await expect(voting.createElection("Private 2025", START, END, true))
+        .to.emit(voting, "ElectionCreated")
+        .withArgs(1, "Private 2025", true);
     });
 
     it("reverts for a non-super-admin", async function () {
       await expect(
-        voting.connect(outsider).createElection("Hack", START, END)
+        voting.connect(outsider).createElection("Hack", START, END, false)
       ).to.be.revertedWith("Not super admin");
     });
 
     it("reverts when startTime >= endTime", async function () {
-      await expect(voting.createElection("Bad range", 100, 100)).to.be.revertedWith(
-        "Invalid time range"
-      );
+      await expect(
+        voting.createElection("Bad range", 100, 100, false)
+      ).to.be.revertedWith("Invalid time range");
     });
   });
 
   describe("assignAdmin", function () {
     beforeEach(async function () {
-      await voting.createElection("E1", START, END);
+      await voting.createElection("E1", START, END, false);
     });
 
     it("lets the super admin grant election-admin rights", async function () {
@@ -56,7 +70,6 @@ describe("VotingSystem", function () {
         .to.emit(voting, "AdminAssigned")
         .withArgs(1, electionAdmin.address);
 
-      // The newly-assigned admin can now add a candidate.
       await expect(voting.connect(electionAdmin).addCandidate(1, "Alice")).to.emit(
         voting,
         "CandidateAdded"
@@ -78,7 +91,7 @@ describe("VotingSystem", function () {
 
   describe("addCandidate", function () {
     beforeEach(async function () {
-      await voting.createElection("E1", START, END);
+      await voting.createElection("E1", START, END, false);
     });
 
     it("lets the election admin add candidates with incrementing ids", async function () {
@@ -106,7 +119,7 @@ describe("VotingSystem", function () {
 
   describe("Election lifecycle", function () {
     beforeEach(async function () {
-      await voting.createElection("E1", START, END);
+      await voting.createElection("E1", START, END, false);
       await voting.addCandidate(1, "Alice");
     });
 
@@ -133,11 +146,18 @@ describe("VotingSystem", function () {
         "Not election admin"
       );
     });
+
+    it("does not allow startReveal on a plain election", async function () {
+      await voting.startElection(1);
+      await expect(voting.startReveal(1)).to.be.revertedWith(
+        "Not a commit-reveal election"
+      );
+    });
   });
 
   describe("authorizeVoter", function () {
     beforeEach(async function () {
-      await voting.createElection("E1", START, END);
+      await voting.createElection("E1", START, END, false);
     });
 
     it("emits VoterAuthorized", async function () {
@@ -153,9 +173,9 @@ describe("VotingSystem", function () {
     });
   });
 
-  describe("vote", function () {
+  describe("vote (plain)", function () {
     beforeEach(async function () {
-      await voting.createElection("E1", START, END);
+      await voting.createElection("E1", START, END, false);
       await voting.addCandidate(1, "Alice");
       await voting.addCandidate(1, "Bob");
       await voting.authorizeVoter(1, voter1.address);
@@ -211,9 +231,143 @@ describe("VotingSystem", function () {
     });
   });
 
+  describe("commit-reveal voting", function () {
+    const SECRET1 = "alice-is-my-pick-42";
+    const SECRET2 = "bob-all-the-way-7";
+
+    beforeEach(async function () {
+      await voting.createElection("Private", START, END, true);
+      await voting.addCandidate(1, "Alice"); // id 1
+      await voting.addCandidate(1, "Bob"); // id 2
+      await voting.authorizeVoter(1, voter1.address);
+      await voting.authorizeVoter(1, voter2.address);
+    });
+
+    it("rejects plain vote() on a commit-reveal election", async function () {
+      await voting.startElection(1);
+      await expect(voting.connect(voter1).vote(1, 1)).to.be.revertedWith(
+        "Use commit-reveal voting"
+      );
+    });
+
+    it("rejects commitVote on a plain election", async function () {
+      await voting.createElection("Plain", START, END, false); // election 2
+      await voting.startElection(2);
+      await expect(
+        voting.connect(voter1).commitVote(2, commitmentFor(1, SECRET1, voter1.address))
+      ).to.be.revertedWith("Not a commit-reveal election");
+    });
+
+    it("accepts a commitment during Active and emits VoteCommitted", async function () {
+      await voting.startElection(1);
+      const c = commitmentFor(1, SECRET1, voter1.address);
+      await expect(voting.connect(voter1).commitVote(1, c))
+        .to.emit(voting, "VoteCommitted")
+        .withArgs(1, voter1.address);
+    });
+
+    it("rejects commitments from unauthorized wallets", async function () {
+      await voting.startElection(1);
+      const c = commitmentFor(1, SECRET1, outsider.address);
+      await expect(voting.connect(outsider).commitVote(1, c)).to.be.revertedWith(
+        "Not authorized"
+      );
+    });
+
+    it("rejects a second commitment from the same voter", async function () {
+      await voting.startElection(1);
+      const c = commitmentFor(1, SECRET1, voter1.address);
+      await voting.connect(voter1).commitVote(1, c);
+      await expect(voting.connect(voter1).commitVote(1, c)).to.be.revertedWith(
+        "Already committed"
+      );
+    });
+
+    it("rejects commitments before the election starts", async function () {
+      const c = commitmentFor(1, SECRET1, voter1.address);
+      await expect(voting.connect(voter1).commitVote(1, c)).to.be.revertedWith(
+        "Commit phase closed"
+      );
+    });
+
+    it("only the admin can start the reveal phase", async function () {
+      await voting.startElection(1);
+      await expect(voting.connect(outsider).startReveal(1)).to.be.revertedWith(
+        "Not election admin"
+      );
+      await expect(voting.startReveal(1)).to.emit(voting, "RevealStarted").withArgs(1);
+    });
+
+    it("cannot end a commit-reveal election before reveal starts", async function () {
+      await voting.startElection(1);
+      await expect(voting.endElection(1)).to.be.revertedWith("Reveal not started");
+    });
+
+    it("rejects reveal outside the reveal phase", async function () {
+      await voting.startElection(1);
+      await voting.connect(voter1).commitVote(1, commitmentFor(1, SECRET1, voter1.address));
+      await expect(
+        voting.connect(voter1).revealVote(1, 1, SECRET1)
+      ).to.be.revertedWith("Not in reveal phase");
+    });
+
+    it("rejects reveal with no prior commitment", async function () {
+      await voting.startElection(1);
+      await voting.startReveal(1);
+      await expect(
+        voting.connect(voter1).revealVote(1, 1, SECRET1)
+      ).to.be.revertedWith("No commitment found");
+    });
+
+    it("rejects a reveal that does not match the commitment", async function () {
+      await voting.startElection(1);
+      await voting.connect(voter1).commitVote(1, commitmentFor(1, SECRET1, voter1.address));
+      await voting.startReveal(1);
+      // wrong candidate
+      await expect(
+        voting.connect(voter1).revealVote(1, 2, SECRET1)
+      ).to.be.revertedWith("Reveal does not match commitment");
+      // wrong secret
+      await expect(
+        voting.connect(voter1).revealVote(1, 1, "wrong-secret")
+      ).to.be.revertedWith("Reveal does not match commitment");
+    });
+
+    it("counts a valid reveal and emits VoteRevealed", async function () {
+      await voting.startElection(1);
+      await voting.connect(voter1).commitVote(1, commitmentFor(1, SECRET1, voter1.address));
+      await voting.startReveal(1);
+      await expect(voting.connect(voter1).revealVote(1, 1, SECRET1))
+        .to.emit(voting, "VoteRevealed")
+        .withArgs(1, voter1.address);
+    });
+
+    it("prevents revealing twice", async function () {
+      await voting.startElection(1);
+      await voting.connect(voter1).commitVote(1, commitmentFor(1, SECRET1, voter1.address));
+      await voting.startReveal(1);
+      await voting.connect(voter1).revealVote(1, 1, SECRET1);
+      await expect(
+        voting.connect(voter1).revealVote(1, 1, SECRET1)
+      ).to.be.revertedWith("Already revealed");
+    });
+
+    it("runs the full flow and tallies revealed votes only", async function () {
+      await voting.startElection(1);
+      await voting.connect(voter1).commitVote(1, commitmentFor(1, SECRET1, voter1.address)); // Alice
+      await voting.connect(voter2).commitVote(1, commitmentFor(2, SECRET2, voter2.address)); // Bob
+      await voting.startReveal(1);
+      await voting.connect(voter1).revealVote(1, 1, SECRET1);
+      // voter2 never reveals -> their vote is not counted
+      await voting.endElection(1);
+      expect(await voting.getCandidateVotes(1, 1)).to.equal(1); // Alice
+      expect(await voting.getCandidateVotes(1, 2)).to.equal(0); // Bob (unrevealed)
+    });
+  });
+
   describe("getCandidateVotes", function () {
     beforeEach(async function () {
-      await voting.createElection("E1", START, END);
+      await voting.createElection("E1", START, END, false);
       await voting.addCandidate(1, "Alice");
       await voting.authorizeVoter(1, voter1.address);
     });

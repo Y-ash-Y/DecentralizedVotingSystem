@@ -10,7 +10,9 @@ contract VotingSystem {
         superAdmin = msg.sender;
     }
 
-    enum ElectionState { Created, Active, Ended }
+    // Created -> Active -> Ended                (plain elections)
+    // Created -> Active -> Reveal -> Ended       (commit-reveal elections)
+    enum ElectionState { Created, Active, Reveal, Ended }
 
     struct Candidate {
         uint id;
@@ -20,8 +22,10 @@ contract VotingSystem {
 
     struct Voter {
         bool isAuthorized;
-        bool hasVoted;
+        bool hasVoted;        // plain: cast a vote   | commit-reveal: revealed
         uint votedCandidateId;
+        bytes32 commitment;   // commit-reveal: keccak256(candidateId, secret, voter)
+        bool hasCommitted;    // commit-reveal: submitted a commitment
     }
 
     struct Election {
@@ -30,6 +34,7 @@ contract VotingSystem {
         uint startTime;
         uint endTime;
         ElectionState state;
+        bool commitReveal;    // true => private commit-reveal voting
 
         uint candidateCount;
 
@@ -42,12 +47,15 @@ contract VotingSystem {
 
     // -------- EVENTS --------
 
-    event ElectionCreated(uint electionId, string name);
+    event ElectionCreated(uint electionId, string name, bool commitReveal);
     event AdminAssigned(uint electionId, address admin);
     event CandidateAdded(uint electionId, uint candidateId, string name);
     event VoterAuthorized(uint electionId, address voter);
     event VoteCast(uint electionId, address voter);
+    event VoteCommitted(uint electionId, address voter);
+    event VoteRevealed(uint electionId, address voter);
     event ElectionStarted(uint electionId);
+    event RevealStarted(uint electionId);
     event ElectionEnded(uint electionId);
 
     // -------- MODIFIERS --------
@@ -76,7 +84,8 @@ contract VotingSystem {
     function createElection(
         string memory _name,
         uint _startTime,
-        uint _endTime
+        uint _endTime,
+        bool _commitReveal
     ) public onlySuperAdmin {
 
         require(_startTime < _endTime, "Invalid time range");
@@ -89,10 +98,11 @@ contract VotingSystem {
         e.startTime = _startTime;
         e.endTime = _endTime;
         e.state = ElectionState.Created;
+        e.commitReveal = _commitReveal;
 
         e.admins[msg.sender] = true;
 
-        emit ElectionCreated(electionCount, _name);
+        emit ElectionCreated(electionCount, _name, _commitReveal);
     }
 
     function assignAdmin(
@@ -153,21 +163,40 @@ contract VotingSystem {
         emit ElectionStarted(_electionId);
     }
 
+    // Move a commit-reveal election from the commit window into the reveal window.
+    function startReveal(uint _electionId)
+        public
+        onlyElectionAdmin(_electionId)
+    {
+        Election storage e = elections[_electionId];
+
+        require(e.commitReveal, "Not a commit-reveal election");
+        require(e.state == ElectionState.Active, "Invalid state");
+
+        e.state = ElectionState.Reveal;
+
+        emit RevealStarted(_electionId);
+    }
+
     function endElection(uint _electionId)
         public
         onlyElectionAdmin(_electionId)
     {
         Election storage e = elections[_electionId];
 
-        require(e.state == ElectionState.Active,
-            "Election not active");
+        // Plain elections end from Active; commit-reveal elections end from Reveal.
+        if (e.commitReveal) {
+            require(e.state == ElectionState.Reveal, "Reveal not started");
+        } else {
+            require(e.state == ElectionState.Active, "Election not active");
+        }
 
         e.state = ElectionState.Ended;
 
         emit ElectionEnded(_electionId);
     }
 
-    // -------- VOTING --------
+    // -------- PLAIN VOTING --------
 
     function vote(uint _electionId, uint _candidateId)
         public
@@ -175,6 +204,7 @@ contract VotingSystem {
     {
         Election storage e = elections[_electionId];
 
+        require(!e.commitReveal, "Use commit-reveal voting");
         require(e.state == ElectionState.Active,
             "Election not active");
 
@@ -194,6 +224,69 @@ contract VotingSystem {
         e.candidates[_candidateId].voteCount++;
 
         emit VoteCast(_electionId, msg.sender);
+    }
+
+    // -------- COMMIT-REVEAL VOTING --------
+
+    // Phase 1 — submit a hashed vote during the Active window. The commitment is
+    // keccak256(abi.encodePacked(candidateId, secret, voterAddress)); it reveals
+    // nothing about the chosen candidate.
+    function commitVote(uint _electionId, bytes32 _commitment)
+        public
+        electionExists(_electionId)
+    {
+        Election storage e = elections[_electionId];
+
+        require(e.commitReveal, "Not a commit-reveal election");
+        require(e.state == ElectionState.Active, "Commit phase closed");
+
+        Voter storage voter = e.voters[msg.sender];
+
+        require(voter.isAuthorized, "Not authorized");
+        require(!voter.hasCommitted, "Already committed");
+
+        voter.commitment = _commitment;
+        voter.hasCommitted = true;
+
+        emit VoteCommitted(_electionId, msg.sender);
+    }
+
+    // Phase 2 — reveal the plaintext during the Reveal window. The contract
+    // recomputes the commitment and only counts the vote if it matches.
+    function revealVote(
+        uint _electionId,
+        uint _candidateId,
+        string memory _secret
+    )
+        public
+        electionExists(_electionId)
+    {
+        Election storage e = elections[_electionId];
+
+        require(e.commitReveal, "Not a commit-reveal election");
+        require(e.state == ElectionState.Reveal, "Not in reveal phase");
+
+        Voter storage voter = e.voters[msg.sender];
+
+        require(voter.hasCommitted, "No commitment found");
+        require(!voter.hasVoted, "Already revealed");
+        require(
+            _candidateId > 0 &&
+            _candidateId <= e.candidateCount,
+            "Invalid candidate"
+        );
+
+        bytes32 check = keccak256(
+            abi.encodePacked(_candidateId, _secret, msg.sender)
+        );
+        require(check == voter.commitment, "Reveal does not match commitment");
+
+        voter.hasVoted = true;
+        voter.votedCandidateId = _candidateId;
+
+        e.candidates[_candidateId].voteCount++;
+
+        emit VoteRevealed(_electionId, msg.sender);
     }
 
     // -------- VIEW FUNCTIONS --------

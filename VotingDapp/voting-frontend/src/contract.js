@@ -13,27 +13,33 @@ export const CONTRACT_ABI = [
   "function electionCount() view returns (uint)",
 
   // ── Admin writes ──
-  "function createElection(string memory _name, uint _startTime, uint _endTime)",
+  "function createElection(string memory _name, uint _startTime, uint _endTime, bool _commitReveal)",
   "function assignAdmin(uint _electionId, address _admin)",
   "function addCandidate(uint _electionId, string memory _name)",
   "function authorizeVoter(uint _electionId, address _voter)",
   "function startElection(uint _electionId)",
+  "function startReveal(uint _electionId)",
   "function endElection(uint _electionId)",
 
-  // ── Voter write ──
+  // ── Voter writes ──
   "function vote(uint _electionId, uint _candidateId)",
+  "function commitVote(uint _electionId, bytes32 _commitment)",
+  "function revealVote(uint _electionId, uint _candidateId, string memory _secret)",
 
   // ── Result read (only after election ends) ──
   "function getCandidateVotes(uint _electionId, uint _candidateId) view returns (uint)",
 
   // ── Events — NO indexed parameters (matches deployed contract) ──
   // Do NOT add `indexed` here; it would cause topic-filter mismatches.
-  "event ElectionCreated(uint electionId, string name)",
+  "event ElectionCreated(uint electionId, string name, bool commitReveal)",
   "event AdminAssigned(uint electionId, address admin)",
   "event CandidateAdded(uint electionId, uint candidateId, string name)",
   "event VoterAuthorized(uint electionId, address voter)",
   "event VoteCast(uint electionId, address voter)",
+  "event VoteCommitted(uint electionId, address voter)",
+  "event VoteRevealed(uint electionId, address voter)",
   "event ElectionStarted(uint electionId)",
+  "event RevealStarted(uint electionId)",
   "event ElectionEnded(uint electionId)",
 ];
 
