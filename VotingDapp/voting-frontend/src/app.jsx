@@ -633,10 +633,13 @@ export default function App() {
     if (!selElection||!selCandId) { setStatus("❌ Select a candidate first"); return; }
     if (hasVoted) { setStatus("❌ Already voted in this election"); return; }
     if (useCommitReveal) {
+      // DEMO ONLY: the deployed contract has no commitVote/revealVote functions,
+      // so this generates the cryptographic commitment hash but does NOT cast a
+      // vote on-chain. See report §5.4 (Commit-Reveal Prototype) / Future Work.
       const secret     = voteSecret || Math.random().toString(36).slice(2);
       const commitment = ethers.keccak256(ethers.toUtf8Bytes(`${selCandId}:${secret}`));
       setVoteSecret(secret);
-      setStatus(`✅ Commitment: ${commitment.slice(0,22)}… — secret: "${secret}"`);
+      setStatus(`⏳ DEMO — commitment ${commitment.slice(0,18)}… generated. No vote was recorded. Uncheck Privacy mode to cast a real vote.`);
       return;
     }
     const c = await getSignerContract();
@@ -972,23 +975,30 @@ export default function App() {
                       <div style={{ marginBottom:14, padding:12, background:C.surface2, borderRadius:8, fontSize:13 }}>
                         Voting for: <strong style={{ color:C.gold }}>{candidates.find(c=>c.id===selCandId)?.name}</strong>
                         <div style={{ color:C.muted, fontSize:11, marginTop:4 }}>
-                          Once submitted, your vote is permanently recorded on Ethereum and cannot be changed.
+                          {useCommitReveal
+                            ? "Privacy mode is a demo — it will generate a commitment hash only, not record a vote."
+                            : "Once submitted, your vote is permanently recorded on Ethereum and cannot be changed."}
                         </div>
                       </div>
                       <div style={{ marginBottom:12, display:"flex", alignItems:"center", gap:8 }}>
                         <input type="checkbox" id="cr" checked={useCommitReveal}
                           onChange={e=>setUseCommitReveal(e.target.checked)} style={{ cursor:"pointer", accentColor:C.gold }}/>
                         <label htmlFor="cr" style={{ fontSize:12, color:C.muted, cursor:"pointer" }}>
-                          Privacy mode (commit-reveal) — hashes your vote with a secret before submitting
+                          Privacy mode (commit-reveal) — <strong style={{ color:C.gold }}>demo only:</strong> generates a commitment hash; does <strong>not</strong> record a vote yet
                         </label>
                       </div>
                       {useCommitReveal && (
-                        <RawInput label="Secret phrase (auto-generated if blank)" placeholder="your-secret-phrase"
-                          value={voteSecret} onChange={e=>setVoteSecret(e.target.value)} mono
-                          hint="Save this — you need it to reveal your vote later."/>
+                        <>
+                          <div style={{ marginBottom:12, padding:"10px 12px", background:C.gold+"14", border:`1px solid ${C.gold}44`, borderRadius:8, fontSize:12, color:C.gold, lineHeight:1.6 }}>
+                            ⚠ <strong>Demonstration only.</strong> This shows the cryptographic commitment step but does <strong>not</strong> cast a vote — the deployed contract has no commit/reveal functions yet. Uncheck Privacy mode to record a real vote.
+                          </div>
+                          <RawInput label="Secret phrase (auto-generated if blank)" placeholder="your-secret-phrase"
+                            value={voteSecret} onChange={e=>setVoteSecret(e.target.value)} mono
+                            hint="Save this — you would need it to reveal your vote once the contract supports it."/>
+                        </>
                       )}
                       <Btn variant="primary" size="lg" onClick={handleVote} disabled={loading}>
-                        {useCommitReveal ? "🔒 Commit Vote" : "🗳 Cast Vote"}
+                        {useCommitReveal ? "🔒 Generate Commitment (demo)" : "🗳 Cast Vote"}
                       </Btn>
                       {voteSecret && useCommitReveal && (
                         <div style={{ marginTop:12, padding:10, background:C.surface2, borderRadius:8, fontFamily:C.mono, fontSize:11, color:C.gold }}>

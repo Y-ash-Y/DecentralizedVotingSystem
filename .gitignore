@@ -10,20 +10,16 @@ node_modules/
 # OS files
 .DS_Store
 
-# Compilation output
-/dist
+# Build / compilation output (any depth)
+dist/
+bundle/
 
-# pnpm deploy output
-/bundle
-
-# Hardhat Build Artifacts
-/artifacts
-
-# Hardhat compilation (v2) support directory
-/cache
+# Hardhat build artifacts & compilation cache (any depth)
+artifacts/
+cache/
 
 # Typechain output
-/types
+types/
 
 # Hardhat coverage reports
-/coverage
+coverage/
