@@ -1,4 +1,7 @@
-require("dotenv").config();
+const path = require("path");
+// The .env lives at the repo root (one level up from this hardhat project).
+// Resolve it from __dirname so it loads no matter which directory you run from.
+require("dotenv").config({ path: path.resolve(__dirname, "../.env") });
 require("@nomiclabs/hardhat-ethers");
 require("@nomicfoundation/hardhat-chai-matchers");
 
