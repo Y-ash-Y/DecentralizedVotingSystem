@@ -1,6 +1,6 @@
 // ── Contract config ───────────────────────────────────────────────────────────
 // Address of the deployed VotingSystem contract on Sepolia
-export const CONTRACT_ADDRESS = "0xE026c911258b38e615eeC2a62b2737dADd50641B";
+export const CONTRACT_ADDRESS = "0xBD29A19DBD25bD4d97C09b65862CB7061A9b3011";
 
 // ABI matches Voting.sol exactly.
 // IMPORTANT: None of the event parameters are `indexed` in the deployed contract.

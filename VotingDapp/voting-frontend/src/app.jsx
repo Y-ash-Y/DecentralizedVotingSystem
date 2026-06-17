@@ -792,9 +792,12 @@ export default function App() {
           {connecting ? "Connecting…" : "Connect MetaMask"}
         </Btn>
         <Toast msg={status} onDismiss={()=>setStatus("")}/>
-        <p style={{ color:C.muted, fontSize:11, marginTop:16, lineHeight:1.9 }}>
-          Deployer wallet → Admin Dashboard<br/>
-          Any other wallet → Voter Interface
+        <p style={{ color:C.muted, fontSize:12, marginTop:18, lineHeight:1.7 }}>
+          Your wallet is your login — connecting proves you own your registered voter address. No password needed.
+        </p>
+        <p style={{ color:C.muted, fontSize:11, marginTop:10, lineHeight:1.9 }}>
+          Admin (deployer) wallet → Admin Dashboard<br/>
+          Any registered voter wallet → Voter Interface
         </p>
       </div>
     </div>
@@ -823,6 +826,17 @@ export default function App() {
   );
 
   // ── Admin view ─────────────────────────────────────────────────────────────
+  // Hard guard: only the contract's superAdmin wallet may render the admin portal.
+  // (The contract also rejects admin txs from non-admins, so this is defense in depth.)
+  if (view==="admin" && !isAdmin) return (
+    <div style={{ background:C.bg, minHeight:"100vh" }}>
+      {topbar}
+      <div style={{ color:C.muted, fontSize:14, paddingTop:100, textAlign:"center", lineHeight:1.8 }}>
+        🔒 Admin portal is restricted to the election authority's wallet.<br/>
+        This wallet is not the admin. Connect the admin wallet in MetaMask to manage elections.
+      </div>
+    </div>
+  );
   if (view==="admin") return (
     <div style={{ background:C.bg, minHeight:"100vh" }}>
       {topbar}
@@ -1014,6 +1028,9 @@ export default function App() {
       ? (selElection.commitReveal ? !hasCommitted : !hasVoted)
       : selElection.state==="reveal" && selElection.commitReveal && !hasVoted
   );
+  // Is the *connected* wallet on this election's authorized list? (event-sourced)
+  const isAuthorizedVoter = !!selElection &&
+    voters.some(v => v.toLowerCase()===(account||"").toLowerCase());
   if (view==="voter") return (
     <div style={{ background:C.bg, minHeight:"100vh" }}>
       {topbar}
@@ -1042,15 +1059,27 @@ export default function App() {
 
               {/* Identity card */}
               <Card style={{ background:"#0d1f2d", borderColor:"#1e3a5f" }}>
-                <div style={{ fontSize:11, color:C.muted, marginBottom:4 }}>Voting as:</div>
+                <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:6 }}>
+                  <div style={{ fontSize:11, color:C.muted }}>Voting as:</div>
+                  <Badge label={isAuthorizedVoter ? "✓ Authorized" : "Not authorized"} color={isAuthorizedVoter ? C.green : C.red}/>
+                </div>
                 <div style={{ display:"flex", alignItems:"center", gap:6 }}>
                   <span style={{ fontFamily:C.mono, fontSize:12, color:C.text, wordBreak:"break-all" }}>{account}</span>
                   <CopyBtn text={account}/>
                 </div>
-                <div style={{ fontSize:11, color:C.muted, marginTop:6 }}>
-                  This wallet must be authorized by the election admin to cast a vote.
-                  Switch accounts in MetaMask if needed, then reconnect.
-                </div>
+                {isAuthorizedVoter ? (
+                  <div style={{ fontSize:11, color:C.muted, marginTop:6 }}>
+                    This wallet is on the authorized voter list for this election.
+                  </div>
+                ) : (
+                  <div style={{ fontSize:12, color:"#f0a0a0", marginTop:8, lineHeight:1.6 }}>
+                    This wallet is <strong>not</strong> on the authorized list for this election, so it cannot vote.
+                    Open MetaMask → switch to your registered voter account → the page reloads automatically.
+                    {isAdmin && <span style={{ display:"block", color:C.muted, marginTop:4 }}>
+                      (You're connected as the admin wallet — admins authorize voters but aren't voters themselves.)
+                    </span>}
+                  </div>
+                )}
               </Card>
 
               {/* Candidates table */}
