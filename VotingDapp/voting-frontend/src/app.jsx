@@ -617,10 +617,10 @@ export default function App() {
     if (r) { setElName(""); setCrMode(false); await sleep(1500); await fetchElections(); }
   };
 
-  // Add one or many candidates in a single transaction (one per line).
+  // Add one or many candidates in a single transaction (split on newlines or commas).
   const handleAddCandidates = async () => {
     if (!selElection) { setStatus("❌ Select an election first"); return; }
-    const names = candName.split("\n").map(s=>s.trim()).filter(Boolean);
+    const names = candName.split(/[\n,]+/).map(s=>s.trim()).filter(Boolean);
     if (!names.length) { setStatus("❌ Enter at least one candidate name"); return; }
     const c = await getSignerContract();
     const r = await sendTx(
@@ -894,7 +894,7 @@ export default function App() {
                         }}
                       />
                       <Btn variant="primary" size="sm" onClick={handleAddCandidates} disabled={loading||!candName.trim()}>
-                        Add Candidate{candName.trim().split("\n").filter(s=>s.trim()).length>1?"s":""}
+                        Add Candidate{candName.split(/[\n,]+/).filter(s=>s.trim()).length>1?"s":""}
                       </Btn>
                       <div style={{ fontSize:11, color:C.muted, marginTop:6 }}>
                         Add all candidates at once — a single MetaMask signature for the whole list.
