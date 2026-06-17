@@ -135,6 +135,25 @@ contract VotingSystem {
         emit CandidateAdded(_electionId, e.candidateCount, _name);
     }
 
+    // Batch variant: add many candidates in a single transaction (one signature).
+    function addCandidates(
+        uint _electionId,
+        string[] memory _names
+    ) public onlyElectionAdmin(_electionId) {
+
+        Election storage e = elections[_electionId];
+
+        require(e.state == ElectionState.Created,
+            "Election already started");
+
+        for (uint i = 0; i < _names.length; i++) {
+            e.candidateCount++;
+            e.candidates[e.candidateCount] =
+                Candidate(e.candidateCount, _names[i], 0);
+            emit CandidateAdded(_electionId, e.candidateCount, _names[i]);
+        }
+    }
+
     // -------- VOTER MANAGEMENT --------
 
     function authorizeVoter(
@@ -145,6 +164,20 @@ contract VotingSystem {
         elections[_electionId].voters[_voter].isAuthorized = true;
 
         emit VoterAuthorized(_electionId, _voter);
+    }
+
+    // Batch variant: authorize many voters in a single transaction (one signature).
+    function authorizeVoters(
+        uint _electionId,
+        address[] memory _voters
+    ) public onlyElectionAdmin(_electionId) {
+
+        Election storage e = elections[_electionId];
+
+        for (uint i = 0; i < _voters.length; i++) {
+            e.voters[_voters[i]].isAuthorized = true;
+            emit VoterAuthorized(_electionId, _voters[i]);
+        }
     }
 
     // -------- ELECTION STATE --------

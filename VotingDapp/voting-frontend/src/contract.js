@@ -1,6 +1,6 @@
 // ── Contract config ───────────────────────────────────────────────────────────
 // Address of the deployed VotingSystem contract on Sepolia
-export const CONTRACT_ADDRESS = "0xa4659c5Bce9aA467b12C0805c3ab32f03378C67C";
+export const CONTRACT_ADDRESS = "0xE026c911258b38e615eeC2a62b2737dADd50641B";
 
 // ABI matches Voting.sol exactly.
 // IMPORTANT: None of the event parameters are `indexed` in the deployed contract.
@@ -16,7 +16,9 @@ export const CONTRACT_ABI = [
   "function createElection(string memory _name, uint _startTime, uint _endTime, bool _commitReveal)",
   "function assignAdmin(uint _electionId, address _admin)",
   "function addCandidate(uint _electionId, string memory _name)",
+  "function addCandidates(uint _electionId, string[] memory _names)",
   "function authorizeVoter(uint _electionId, address _voter)",
+  "function authorizeVoters(uint _electionId, address[] memory _voters)",
   "function startElection(uint _electionId)",
   "function startReveal(uint _electionId)",
   "function endElection(uint _electionId)",

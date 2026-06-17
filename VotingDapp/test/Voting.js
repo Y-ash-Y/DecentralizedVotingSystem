@@ -117,6 +117,71 @@ describe("VotingSystem", function () {
     });
   });
 
+  describe("addCandidates (batch)", function () {
+    beforeEach(async function () {
+      await voting.createElection("E1", START, END, false);
+    });
+
+    it("adds several candidates in one call with sequential ids", async function () {
+      const tx = await voting.addCandidates(1, ["Alice", "Bob", "Carol"]);
+      const receipt = await tx.wait();
+      const added = receipt.events.filter((e) => e.event === "CandidateAdded");
+      expect(added.length).to.equal(3);
+      expect(added.map((e) => e.args.candidateId.toNumber())).to.deep.equal([1, 2, 3]);
+      expect(added.map((e) => e.args.name)).to.deep.equal(["Alice", "Bob", "Carol"]);
+    });
+
+    it("appends to candidates already added singly", async function () {
+      await voting.addCandidate(1, "Alice"); // id 1
+      await voting.addCandidates(1, ["Bob", "Carol"]); // ids 2, 3
+      await voting.authorizeVoter(1, voter1.address);
+      await voting.startElection(1);
+      await voting.connect(voter1).vote(1, 3); // Carol
+      await voting.endElection(1);
+      expect(await voting.getCandidateVotes(1, 3)).to.equal(1);
+    });
+
+    it("reverts for a non-admin", async function () {
+      await expect(
+        voting.connect(outsider).addCandidates(1, ["X", "Y"])
+      ).to.be.revertedWith("Not election admin");
+    });
+
+    it("reverts once the election has started", async function () {
+      await voting.startElection(1);
+      await expect(voting.addCandidates(1, ["Late"])).to.be.revertedWith(
+        "Election already started"
+      );
+    });
+  });
+
+  describe("authorizeVoters (batch)", function () {
+    beforeEach(async function () {
+      await voting.createElection("E1", START, END, false);
+      await voting.addCandidate(1, "Alice");
+    });
+
+    it("authorizes several voters in one call", async function () {
+      const tx = await voting.authorizeVoters(1, [voter1.address, voter2.address]);
+      const receipt = await tx.wait();
+      const evts = receipt.events.filter((e) => e.event === "VoterAuthorized");
+      expect(evts.length).to.equal(2);
+
+      // Both can now vote.
+      await voting.startElection(1);
+      await voting.connect(voter1).vote(1, 1);
+      await voting.connect(voter2).vote(1, 1);
+      await voting.endElection(1);
+      expect(await voting.getCandidateVotes(1, 1)).to.equal(2);
+    });
+
+    it("reverts for a non-admin", async function () {
+      await expect(
+        voting.connect(outsider).authorizeVoters(1, [voter1.address])
+      ).to.be.revertedWith("Not election admin");
+    });
+  });
+
   describe("Election lifecycle", function () {
     beforeEach(async function () {
       await voting.createElection("E1", START, END, false);

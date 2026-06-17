@@ -617,17 +617,31 @@ export default function App() {
     if (r) { setElName(""); setCrMode(false); await sleep(1500); await fetchElections(); }
   };
 
-  const handleAddCandidate = async () => {
+  // Add one or many candidates in a single transaction (one per line).
+  const handleAddCandidates = async () => {
     if (!selElection) { setStatus("❌ Select an election first"); return; }
+    const names = candName.split("\n").map(s=>s.trim()).filter(Boolean);
+    if (!names.length) { setStatus("❌ Enter at least one candidate name"); return; }
     const c = await getSignerContract();
-    const r = await sendTx(() => c.addCandidate(Number(selElection.id), candName), `Candidate "${candName}" added`);
+    const r = await sendTx(
+      () => c.addCandidates(Number(selElection.id), names),
+      names.length===1 ? `Candidate "${names[0]}" added` : `${names.length} candidates added`
+    );
     if (r) { setCandName(""); await sleep(1000); await fetchCandidates(selElection.id); }
   };
 
-  const handleAuthorizeVoter = async () => {
+  // Authorize one or many voters in a single transaction (whitespace/comma separated).
+  const handleAuthorizeVoters = async () => {
     if (!selElection) { setStatus("❌ Select an election first"); return; }
+    const addrs = voterAddr.split(/[\s,]+/).map(s=>s.trim()).filter(Boolean);
+    if (!addrs.length) { setStatus("❌ Enter at least one wallet address"); return; }
+    const bad = addrs.find(a => !ethers.isAddress(a));
+    if (bad) { setStatus(`❌ Invalid address: ${bad}`); return; }
     const c = await getSignerContract();
-    const r = await sendTx(() => c.authorizeVoter(Number(selElection.id), voterAddr), `Voter ${short(voterAddr)} authorized`);
+    const r = await sendTx(
+      () => c.authorizeVoters(Number(selElection.id), addrs),
+      addrs.length===1 ? `Voter ${short(addrs[0])} authorized` : `${addrs.length} voters authorized`
+    );
     if (r) { setVoterAddr(""); await sleep(1000); await fetchVoters(selElection.id); }
   };
 
@@ -866,11 +880,25 @@ export default function App() {
                   <SectionTitle>Candidates ({candidates.length})</SectionTitle>
                   {selElection.state==="created" && (
                     <div style={{ marginBottom:14 }}>
-                      <RawInput label="Candidate Name" placeholder="e.g. Alice Sharma"
-                        value={candName} onChange={e=>setCandName(e.target.value)}/>
-                      <Btn variant="primary" size="sm" onClick={handleAddCandidate} disabled={loading||!candName}>
-                        Add Candidate
+                      <div style={{ fontSize:11, fontWeight:600, color:C.muted, textTransform:"uppercase", letterSpacing:"0.08em", marginBottom:5 }}>
+                        Candidate Names — one per line
+                      </div>
+                      <textarea
+                        value={candName} onChange={e=>setCandName(e.target.value)} rows={4}
+                        placeholder={"Alice Sharma\nBob Mehta\nCarol Singh"}
+                        style={{
+                          width:"100%", padding:"9px 12px", background:C.surface2,
+                          border:`1px solid ${C.border}`, borderRadius:8, color:C.text,
+                          fontSize:13, fontFamily:C.sans, outline:"none", boxSizing:"border-box",
+                          resize:"vertical", marginBottom:6,
+                        }}
+                      />
+                      <Btn variant="primary" size="sm" onClick={handleAddCandidates} disabled={loading||!candName.trim()}>
+                        Add Candidate{candName.trim().split("\n").filter(s=>s.trim()).length>1?"s":""}
                       </Btn>
+                      <div style={{ fontSize:11, color:C.muted, marginTop:6 }}>
+                        Add all candidates at once — a single MetaMask signature for the whole list.
+                      </div>
                     </div>
                   )}
                   {selElection.state!=="created" && candidates.length===0 && (
@@ -905,13 +933,24 @@ export default function App() {
                   <SectionTitle>Authorized Voters ({voters.length})</SectionTitle>
                   {selElection.state!=="ended" && (
                     <div style={{ marginBottom:14 }}>
-                      <RawInput label="Voter Wallet Address" placeholder="0x…"
-                        value={voterAddr} onChange={e=>setVoterAddr(e.target.value)} mono/>
-                      <Btn variant="primary" size="sm" onClick={handleAuthorizeVoter} disabled={loading||!voterAddr}>
-                        Authorize Voter
+                      <div style={{ fontSize:11, fontWeight:600, color:C.muted, textTransform:"uppercase", letterSpacing:"0.08em", marginBottom:5 }}>
+                        Voter Wallet Addresses — one per line
+                      </div>
+                      <textarea
+                        value={voterAddr} onChange={e=>setVoterAddr(e.target.value)} rows={4}
+                        placeholder={"0xabc…\n0xdef…\n0x123…"}
+                        style={{
+                          width:"100%", padding:"9px 12px", background:C.surface2,
+                          border:`1px solid ${C.border}`, borderRadius:8, color:C.text,
+                          fontSize:13, fontFamily:C.mono, outline:"none", boxSizing:"border-box",
+                          resize:"vertical", marginBottom:6,
+                        }}
+                      />
+                      <Btn variant="primary" size="sm" onClick={handleAuthorizeVoters} disabled={loading||!voterAddr.trim()}>
+                        Authorize Voter{voterAddr.trim().split(/[\s,]+/).filter(Boolean).length>1?"s":""}
                       </Btn>
                       <div style={{ fontSize:11, color:C.muted, marginTop:6 }}>
-                        One MetaMask signature per voter — required by the Ethereum security model.
+                        Paste a whole list — all authorized in a single MetaMask signature.
                       </div>
                     </div>
                   )}
