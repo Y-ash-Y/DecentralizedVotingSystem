@@ -2,23 +2,39 @@
   "name": "votingdapp",
   "version": "1.0.0",
   "description": "VoteChain — a decentralized voting system on Ethereum (Solidity + Hardhat + React).",
-  "main": "index.js",
+  "type": "module",
+  "engines": {
+    "node": ">=22.13.0"
+  },
   "scripts": {
-    "test": "hardhat test"
+    "demo:node": "hardhat node --config hardhat.local.config.js --network hardhat --hostname 127.0.0.1 --port 8545",
+    "demo:setup": "node scripts/local-demo.cjs setup",
+    "demo:ui": "node scripts/local-demo.cjs ui",
+    "demo:phase": "node scripts/local-demo.cjs phase",
+    "demo:status": "node scripts/local-demo.cjs status",
+    "test": "hardhat test --network hardhat",
+    "test:coverage": "hardhat test mocha --network hardhat --coverage --grep-exclude 'deployment fits the EVM 24KB'",
+    "audit:dependencies": "npm audit --audit-level=low",
+    "benchmark": "hardhat run scripts/benchmark.js --network hardhat",
+    "benchmark:v2": "hardhat run scripts/benchmark-v2.js --network hardhat",
+    "deploy:local": "hardhat run scripts/deploy-v2.js --network hardhat",
+    "benchmark:current": "hardhat run scripts/benchmark-v2.js --network hardhat",
+    "release:check": "node scripts/check-release.js"
   },
   "keywords": [],
   "author": "",
-  "license": "ISC",
+  "license": "MPL-2.0",
   "devDependencies": {
-    "@nomicfoundation/hardhat-chai-matchers": "^1.0.6",
-    "@nomiclabs/hardhat-ethers": "^2.2.3",
-    "chai": "^4.5.0",
-    "ethers": "^5.8.0",
-    "hardhat": "^2.22.0"
+    "@nomicfoundation/hardhat-ethers": "4.2.0",
+    "@nomicfoundation/hardhat-ethers-chai-matchers": "3.0.11",
+    "@nomicfoundation/hardhat-mocha": "4.0.0",
+    "chai": "6.2.2",
+    "mocha": "12.0.2",
+    "ethers": "6.17.0",
+    "hardhat": "3.18.0"
   },
   "dependencies": {
-    "dotenv": "^17.3.1",
-    "react": "^19.2.4",
-    "react-dom": "^19.2.4"
-  }
+    "dotenv": "17.3.1"
+  },
+  "private": true
 }

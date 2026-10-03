@@ -1,13 +1,23 @@
 // ── Contract config ───────────────────────────────────────────────────────────
 // Address of the deployed VotingSystem contract on Sepolia
-export const CONTRACT_ADDRESS = "0xBD29A19DBD25bD4d97C09b65862CB7061A9b3011";
+import { ABI_V2 } from "./abiV2.js";
+import { networkConfig } from "./lib/network.js";
+const env = import.meta.env || {};
+export const NETWORK = networkConfig(env);
+export const PROTOCOL_VERSION = Number(env.VITE_PROTOCOL_VERSION || 1);
+if (![1, 2].includes(PROTOCOL_VERSION)) throw new Error("Unsupported VITE_PROTOCOL_VERSION");
+export const CONTRACT_ADDRESS = env.VITE_CONTRACT_ADDRESS || "0xBD29A19DBD25bD4d97C09b65862CB7061A9b3011";
+export const EXPECTED_CODE_HASH = env.VITE_EXPECTED_CODE_HASH || "";
+if (PROTOCOL_VERSION === 2 && (!env.VITE_CONTRACT_ADDRESS || !EXPECTED_CODE_HASH || !env.VITE_DEPLOYMENT_BLOCK)) {
+  throw new Error("V2 requires an address, deployment block and bytecode hash from its deployment manifest");
+}
 
 // ABI matches Voting.sol exactly.
 // IMPORTANT: None of the event parameters are `indexed` in the deployed contract.
 // Filtering by topic (e.g. filters.CandidateAdded(electionId)) is therefore not
 // supported by ethers v6. Always call queryFilter with no arguments and filter
 // the results by electionId in JavaScript.
-export const CONTRACT_ABI = [
+export const LEGACY_ABI = [
   // ── State reads ──
   "function superAdmin() view returns (address)",
   "function electionCount() view returns (uint)",
@@ -44,6 +54,7 @@ export const CONTRACT_ABI = [
   "event RevealStarted(uint electionId)",
   "event ElectionEnded(uint electionId)",
 ];
+export const CONTRACT_ABI = PROTOCOL_VERSION === 2 ? ABI_V2 : LEGACY_ABI;
 
 export const SEPOLIA_CHAIN_ID = 11155111;
 export const SEPOLIA_HEX      = "0xaa36a7";

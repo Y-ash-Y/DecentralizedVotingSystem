@@ -1,0 +1,93 @@
+{
+  "date": "2026-10-03",
+  "scope": "Local portfolio release review; not a pushed revision, independent audit or public deployment",
+  "normalTests": {
+    "hardhat": 97,
+    "services": 52,
+    "dom": 29,
+    "chromiumViewportCases": null,
+    "total": 178
+  },
+  "browserCheckpoint": {
+    "lastPassedDate": "2026-10-02",
+    "cases": 3,
+    "currentRerun": "Could not launch: temporary browser binary was cleared; stalled replacement download was interrupted. No current browser pass claimed."
+  },
+  "coverage": {
+    "contractTool": "Hardhat 3 native coverage",
+    "instrumentedCases": 96,
+    "contractStatements": 100,
+    "contractLines": 100,
+    "contractBranches": null,
+    "serviceLines": 95.02,
+    "serviceBranches": 92.27,
+    "serviceFunctions": 100
+  },
+  "slither": {
+    "scanDate": "2026-10-02",
+    "version": "0.11.5",
+    "success": true,
+    "contracts": 3,
+    "detectors": 101,
+    "high": 0,
+    "medium": 0,
+    "low": 3,
+    "informational": 33,
+    "optimization": 1,
+    "input": "Direct Solidity standard JSON, non-instrumented"
+  },
+  "npmAdvisories": {
+    "scanDate": "2026-10-03",
+    "frontend": 0,
+    "developmentToolchain": 0
+  },
+  "sourceSha256": {
+    "VotingDapp/contracts/Voting.sol": "059cb6793fcfc13c6daf1973791bc7a4e0e97a84f9579477f2c0273fbe9fb08f",
+    "VotingDapp/contracts/VotingV2.sol": "76654d5cb0de2108b42d05e3c5acb8e8d0a2257ab3ac385621c3bfe14d1ab8db",
+    "VotingDapp/contracts/test/VotingLocalTest.sol": "e051872b8f9613e344a93e3996361e759d6bbfdc15e3ed0a209d9373d7d700dd",
+    "VotingDapp/package-lock.json": "20b795693c24f766b0c41d306640fceee4ddb46ae5871eb731397f98dd5d328d",
+    "VotingDapp/voting-frontend/package-lock.json": "e67d873ac3a05b703b4253090a17603ec0fb16db330583ff0183f74b3676b76d",
+    "VotingDapp/hardhat.local.config.js": "62faa636369f6860a4247fe398bc73fba4a7c2918c8decc399f4125cefe61e02",
+    "VotingDapp/test/LocalDemoAutoMining.js": "bf50357a80fc33d61b583cdc8fcec3bb12eaaeb8f7e3fba3ab636b76fed49fed",
+    "VotingDapp/voting-frontend/src/app.jsx": "8b7e912241f1640058750411e3ac9e5733267c8c7341dc23228c85516e8119c8",
+    "VotingDapp/voting-frontend/src/lib/errors.js": "d16afc3f9576c72e5380ba3a2c6fcea9a3c81a4a354e127372701a781bd077d7",
+    "VotingDapp/voting-frontend/src/lib/transactions.js": "34f7b65883b37679e871d7ec6fff281df93e45098aaa09059d78fb266b871d99"
+  },
+  "currentRuntime": {
+    "bytes": 19165,
+    "keccak256": "0x369b26f5d2a52fd0942d22ed9d0aca218e38d2ada72e8dbcc0959da628ac138f",
+    "abiHash": "0xff3e0d692e54bece07a7ec3ebf294446f1a77cfb3d8093780a3e5d2e46f5d414",
+    "deploymentGas": 4188051
+  },
+  "toolchain": {
+    "node": "22.22.2",
+    "hardhat": "3.18.0",
+    "ethers": "6.17.0",
+    "solidity": "0.8.20",
+    "optimizer": false,
+    "evmVersion": "paris"
+  },
+  "buildMinifiedKB": {
+    "application": 69.27,
+    "react": 218.83,
+    "ethereum": 254.18,
+    "sharedRuntime": 0.71
+  },
+  "acceptance": {
+    "portfolioImplementationComplete": true,
+    "ownerAcceptedLocalWalkthroughDate": "2026-10-03",
+    "automaticSchedulingLocalWalletTest": "user-confirmed pass; not independent extension observation",
+    "independentAuditSignOff": false,
+    "externalReviewRequiredForPortfolioRelease": false,
+    "securityReviewType": "Internal source review by implementation agent plus automated checks; not independent audit",
+    "cleanInstall": true,
+    "disposableDeployment": true,
+    "metaMaskLocalHappyPath": "user confirmed",
+    "completeWalletEdgeCases": false,
+    "hostedCIObserved": false,
+    "publicCurrentContractDeployed": false,
+    "pushed": false,
+    "existingDeploymentsReconfigured": false,
+    "localSessionReset": false
+  }
+}

@@ -1,0 +1,20 @@
+import test from "node:test";
+import assert from "node:assert/strict";
+import { keccak256 } from "ethers";
+import { verifyDeployment, enrichElections } from "../src/lib/deployment.js";
+import { summarizeResults } from "../src/lib/results.js";
+const config = { address:"0x123",chainId:1,version:2,codeHash:keccak256("0x1234") };
+const fake = () => ({runner:{getNetwork:async()=>({chainId:1n}),getCode:async()=>"0x1234"},protocolVersion:async()=>2n});
+test("accepts the expected network, code and version",async()=>{await verifyDeployment(fake(),config);});
+test("rejects wrong network before any write",async()=>{await assert.rejects(verifyDeployment(fake(),{...config,chainId:2}),/network/);});
+test("rejects empty deployment address",async()=>{const c=fake();c.runner.getCode=async()=>"0x";await assert.rejects(verifyDeployment(c,config),/No contract/);});
+test("rejects incorrect deployed code",async()=>{await assert.rejects(verifyDeployment(fake(),{...config,codeHash:keccak256("0xab")}),/bytecode/);});
+test("rejects incompatible protocol",async()=>{const c=fake();c.protocolVersion=async()=>1n;await assert.rejects(verifyDeployment(c,config),/version/);});
+test("scheduled state and delegation override stale event-derived phase",async()=>{
+  const c={runner:{getBlockNumber:async()=>20},getElection:async()=>({state:2n,isSealed:true,startTime:1n,votingEnd:2n,endTime:3n}),isElectionAdmin:async()=>true};
+  const [e]=await enrichElections(c,[{id:"1",state:"active"}],"viewer");
+  assert.equal(e.state,"reveal"); assert.equal(e.canManage,true);
+});
+test("zero turnout has no winner",()=>{assert.equal(summarizeResults([{id:1,votes:0},{id:2,votes:0}]).status,"no-votes");});
+test("a tie lists all equal leaders",()=>{const r=summarizeResults([{id:1,votes:5},{id:2,votes:5},{id:3,votes:1}]);assert.equal(r.status,"tie");assert.deepEqual(r.leaders.map(r=>r.id),[1,2]);});
+test("one highest tally is a leader, absent results are unavailable",()=>{assert.equal(summarizeResults([{votes:2},{votes:1}]).status,"leader");assert.equal(summarizeResults([]).status,"unavailable");});

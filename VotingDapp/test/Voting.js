@@ -1,12 +1,14 @@
-const { ethers } = require("hardhat");
-const { expect } = require("chai");
+import { network as networkManager, artifacts } from "hardhat";
+const network = await networkManager.create("hardhat");
+const { ethers } = network;
+import { expect } from "chai";
 
 const START = 0;
 const END = 9999999999;
 
 // Mirror of the on-chain commitment: keccak256(abi.encodePacked(candidateId, secret, voter)).
 function commitmentFor(candidateId, secret, voter) {
-  return ethers.utils.solidityKeccak256(
+  return ethers.solidityPackedKeccak256(
     ["uint256", "string", "address"],
     [candidateId, secret, voter]
   );
@@ -20,7 +22,7 @@ describe("VotingSystem", function () {
     [superAdmin, electionAdmin, voter1, voter2, outsider] = await ethers.getSigners();
     const Factory = await ethers.getContractFactory("VotingSystem");
     voting = await Factory.deploy();
-    await voting.deployed();
+    await voting.waitForDeployment();
   });
 
   describe("Deployment", function () {
@@ -125,9 +127,9 @@ describe("VotingSystem", function () {
     it("adds several candidates in one call with sequential ids", async function () {
       const tx = await voting.addCandidates(1, ["Alice", "Bob", "Carol"]);
       const receipt = await tx.wait();
-      const added = receipt.events.filter((e) => e.event === "CandidateAdded");
+      const added = receipt.logs.filter((e) => e.fragment?.name === "CandidateAdded");
       expect(added.length).to.equal(3);
-      expect(added.map((e) => e.args.candidateId.toNumber())).to.deep.equal([1, 2, 3]);
+      expect(added.map((e) => Number(e.args.candidateId))).to.deep.equal([1, 2, 3]);
       expect(added.map((e) => e.args.name)).to.deep.equal(["Alice", "Bob", "Carol"]);
     });
 
@@ -164,7 +166,7 @@ describe("VotingSystem", function () {
     it("authorizes several voters in one call", async function () {
       const tx = await voting.authorizeVoters(1, [voter1.address, voter2.address]);
       const receipt = await tx.wait();
-      const evts = receipt.events.filter((e) => e.event === "VoterAuthorized");
+      const evts = receipt.logs.filter((e) => e.fragment?.name === "VoterAuthorized");
       expect(evts.length).to.equal(2);
 
       // Both can now vote.

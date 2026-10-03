@@ -1,0 +1,54 @@
+name: Contract and frontend checks
+on: [push, pull_request]
+permissions:
+  contents: read
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: .nvmrc
+          cache: npm
+          cache-dependency-path: |
+            VotingDapp/package-lock.json
+            VotingDapp/voting-frontend/package-lock.json
+      - run: npm ci --ignore-scripts
+        working-directory: VotingDapp
+      - run: npm ci --ignore-scripts
+        working-directory: VotingDapp/voting-frontend
+      - run: npm run release:check
+        working-directory: VotingDapp
+      - run: npm run audit:dependencies
+        working-directory: VotingDapp
+      - run: npm audit --audit-level=low
+        working-directory: VotingDapp/voting-frontend
+      - run: npm test
+        working-directory: VotingDapp
+      - run: npm run test:coverage
+        working-directory: VotingDapp
+      # Coverage changes artifacts. Restore and verify the normal build.
+      - run: npm test
+        working-directory: VotingDapp
+      - run: npm test
+        working-directory: VotingDapp/voting-frontend
+      - run: npm run build
+        working-directory: VotingDapp/voting-frontend
+      - run: npm run test:ui
+        working-directory: VotingDapp/voting-frontend
+      - run: npx playwright install --with-deps chromium
+        working-directory: VotingDapp/voting-frontend
+      - run: npm run test:browser
+        working-directory: VotingDapp/voting-frontend
+      - run: npm run test:coverage
+        working-directory: VotingDapp/voting-frontend
+      - run: npm run benchmark:events
+        working-directory: VotingDapp/voting-frontend
+      - run: npx hardhat run scripts/deploy-v2.js --network hardhat
+        working-directory: VotingDapp
+      - run: npm run benchmark
+        working-directory: VotingDapp
+      - run: npm run benchmark:v2
+        working-directory: VotingDapp

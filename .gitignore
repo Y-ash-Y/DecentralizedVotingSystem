@@ -3,12 +3,15 @@ node_modules/
 
 # Secrets — never commit
 .env
-.env.local
-.env.*.local
+.env.*
+!.env.example
 *.key
+*.pem
+votechain-ballot-*.json
 
 # OS files
 .DS_Store
+.claude/
 
 # Build / compilation output (any depth)
 dist/
@@ -23,3 +26,12 @@ types/
 
 # Hardhat coverage reports
 coverage/
+
+# Generated disposable-chain session metadata; never deployment evidence
+.votechain-local/
+
+# Local history-cleanup backup, not application source
+votingdapp-scrub.git/
+test-results/
+playwright-report/
+crytic-export/

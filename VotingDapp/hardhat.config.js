@@ -1,27 +1,19 @@
-const path = require("path");
-// The .env lives at the repo root (one level up from this hardhat project).
-// Resolve it from __dirname so it loads no matter which directory you run from.
-require("dotenv").config({ path: path.resolve(__dirname, "../.env") });
-require("@nomiclabs/hardhat-ethers");
-require("@nomicfoundation/hardhat-chai-matchers");
+import { fileURLToPath } from "node:url";
+import dotenv from "dotenv";
+import { defineConfig, configVariable } from "hardhat/config";
+import ethersPlugin from "@nomicfoundation/hardhat-ethers";
+import chaiMatchers from "@nomicfoundation/hardhat-ethers-chai-matchers";
+import mochaPlugin from "@nomicfoundation/hardhat-mocha";
 
-
-// Env vars are only needed for live-network actions (deploy/verify on Sepolia).
-// Fall back to safe defaults so local `hardhat test` runs without a configured .env.
-const SEPOLIA_RPC_URL = process.env.SEPOLIA_RPC_URL || "";
-const PRIVATE_KEY = process.env.PRIVATE_KEY || "";
-
-module.exports = {
-  solidity: "0.8.20",
-  networks: {
-    sepolia: {
-      url: SEPOLIA_RPC_URL,
-      accounts: PRIVATE_KEY ? [PRIVATE_KEY] : [],
-    },
+dotenv.config({path:fileURLToPath(new URL("../.env",import.meta.url)),quiet:true});
+export default defineConfig({
+  plugins:[ethersPlugin,chaiMatchers,mochaPlugin],
+  // Preserve compiler settings while migrating the development toolchain.
+  solidity:{version:"0.8.20",settings:{optimizer:{enabled:false,runs:200},evmVersion:"paris"}},
+  networks:{
+    hardhat:{type:"edr-simulated",chainType:"l1",chainId:31337},
+    localhost:{type:"http",chainType:"l1",url:"http://127.0.0.1:8545",chainId:31337},
+    sepolia:{type:"http",chainType:"l1",chainId:11155111,
+      url:configVariable("SEPOLIA_RPC_URL"),accounts:[configVariable("PRIVATE_KEY")]},
   },
-  etherscan: {
-    apiKey: {
-      sepolia: process.env.ETHERSCAN_API_KEY || "",
-    },
-  },
-};
+});

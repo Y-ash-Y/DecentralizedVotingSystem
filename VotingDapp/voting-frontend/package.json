@@ -1,17 +1,34 @@
 {
   "name": "voting-frontend",
-  "version": "0.0.0",
+  "version": "1.0.0",
   "private": true,
   "type": "module",
   "scripts": {
+    "benchmark:events": "node --expose-gc scripts/benchmark-events.mjs",
+    "test:browser": "playwright test",
+    "test:coverage": "node --experimental-test-coverage --test --test-coverage-include='src/lib/*.js' test/*.test.js",
+    "test": "node --test test/*.test.js",
+    "test:ui": "vitest run",
     "dev": "vite",
     "build": "vite build",
     "preview": "vite preview"
   },
   "devDependencies": {
-    "vite": "^8.0.1"
+    "@playwright/test": "1.62.1",
+    "@testing-library/react": "^16.3.3",
+    "@testing-library/user-event": "^14.6.7",
+    "axe-core": "4.11.0",
+    "jsdom": "^26.1.0",
+    "vite": "^8.0.1",
+    "vitest": "^4.1.11"
   },
   "dependencies": {
-    "ethers": "^6.16.0"
+    "ethers": "^6.16.0",
+    "react": "^19.3.0",
+    "react-dom": "^19.3.0"
+  },
+  "license": "MPL-2.0",
+  "engines": {
+    "node": ">=22.13.0"
   }
 }

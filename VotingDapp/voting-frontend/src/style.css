@@ -1,5 +1,4 @@
-@import url('https://fonts.googleapis.com/css2?family=Space+Mono:wght@400;700&family=DM+Sans:wght@300;400;500;600&display=swap');
-
+/* System fallbacks avoid a third-party font request on the voting page. */
 :root {
   --bg:        #0d1117;
   --surface:   #161b22;
@@ -52,4 +51,15 @@ body {
   background: #3fb950;
   animation: pulse 1.5s infinite;
   margin-right: 6px;
+}
+
+button:focus-visible, input:focus-visible, textarea:focus-visible, a:focus-visible {
+  outline: 2px solid #e3b341 !important;
+  outline-offset: 3px;
+}
+@media (max-width: 760px) {
+  .app-layout { flex-direction: column; }
+  .election-sidebar { width: 100% !important; border-right: 0 !important; border-bottom: 1px solid var(--border); }
+  .admin-grid { grid-template-columns: 1fr !important; }
+  .topbar { height: auto !important; min-height: 52px; flex-wrap: wrap; gap: 8px; padding: 8px 12px !important; }
 }
