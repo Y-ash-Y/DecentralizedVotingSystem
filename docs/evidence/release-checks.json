@@ -1,17 +1,24 @@
 {
   "date": "2026-10-03",
-  "scope": "Local portfolio release review; not a pushed revision, independent audit or public deployment",
+  "scope": "Local engineering evidence and successful hosted CI for the code revision named below; not independent audit or public-chain deployment",
+  "hostedCI": {
+    "codeRevision": "244487fc5e5d1ee945e8c04fef0d29855e9d7c74",
+    "runId": 37103526694,
+    "url": "https://github.com/Y-ash-Y/DecentralizedVotingSystem/actions/runs/37103526694",
+    "conclusion": "success",
+    "date": "2026-10-03"
+  },
   "normalTests": {
     "hardhat": 97,
     "services": 52,
     "dom": 29,
-    "chromiumViewportCases": null,
-    "total": 178
+    "chromiumViewportCases": 3,
+    "total": 181
   },
   "browserCheckpoint": {
-    "lastPassedDate": "2026-10-02",
+    "lastPassedDate": "2026-10-03",
     "cases": 3,
-    "currentRerun": "Could not launch: temporary browser binary was cleared; stalled replacement download was interrupted. No current browser pass claimed."
+    "currentRerun": "Passed in hosted CI on the codeRevision above, using an isolated simulated wallet. The local temporary-browser installation is not required as evidence of this hosted run."
   },
   "coverage": {
     "contractTool": "Hardhat 3 native coverage",
@@ -84,9 +91,9 @@
     "disposableDeployment": true,
     "metaMaskLocalHappyPath": "user confirmed",
     "completeWalletEdgeCases": false,
-    "hostedCIObserved": false,
+    "hostedCIObserved": true,
     "publicCurrentContractDeployed": false,
-    "pushed": false,
+    "pushed": true,
     "existingDeploymentsReconfigured": false,
     "localSessionReset": false
   }

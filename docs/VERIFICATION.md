@@ -7,14 +7,22 @@
 | Contract/local-EVM suite | 97 passing, including schedule boundaries, ownership, atomic batches, domain binding, independent seeded tallies and frontend ABI integration |
 | Frontend services | 52 passing |
 | Simulated DOM | 29 passing, including raw provider/backup error redaction |
-| Isolated Chromium | 3 passed on 2 October at 375/768/1440 px; current rerun could not launch because the temporary browser binary was cleared; replacement download was stopped after stalling |
-| Normal total | **178 passing on this revision**, not real-wallet tests |
+| Isolated Chromium | 3 passing in hosted CI at 375/768/1440 px; isolated simulated wallet |
+| Normal total | **181 passing**, not real-wallet tests |
 | Contract coverage | 96 instrumented cases; all three contracts report 100% lines/statements |
 | Clean installation | Both lockfiles installed in a credential-free temporary source copy; contracts/services/DOM/build pass |
 | Deployment | Standard contract on a disposable in-process chain; no public funds or network |
 | Dependency scans | Both packages: 0 known npm advisories at the 3 October pre-publication scan |
 | Slither 0.11.5 | 2 October scan, unchanged contracts: 3 contracts, 101 detectors; 37 findings: 0 high, 0 medium, 3 low, 33 informational, 1 optimization |
-| Public/hosted CI | Not observed for this release; local work is not remote evidence |
+| Public/hosted CI | All steps passed for code revision 244487fc5e5d1ee945e8c04fef0d29855e9d7c74 on 3 October |
+
+[Hosted verification evidence](https://github.com/Y-ash-Y/DecentralizedVotingSystem/actions/runs/37103526694)
+includes locked installation, publication preflight, both dependency scans,
+contract tests/coverage, ordinary-artifact restoration, frontend services/build/UI,
+browser tests, service coverage, event/gas benchmarks and disposable deployment.
+The hosted browser installation succeeded; the missing local browser binary no
+longer leaves the code revision's browser checks unverified. The run identifier
+above is a fixed evidence checkpoint, not a claim about every future revision.
 
 The user confirmed the real MetaMask local happy path through commit, backup,
 reveal and final tally. On 3 October the owner also accepted the fresh local

@@ -139,10 +139,11 @@ npx playwright install chromium
 npm run test:browser
 ```
 
-The recorded checks include **97 contract/local-EVM cases, 52 service cases and
-29 simulated UI cases**. A separate 96-case instrumented run reports 100%
-contract lines/statements. Three browser viewport cases have a separate dated
-checkpoint; they are not included in the 178-case total. See
+The recorded checks include **181 passing cases**: 97 contract/local-EVM,
+52 service, 29 simulated UI and 3 browser viewport cases. A separate 96-case
+instrumented run reports 100% contract lines/statements. The
+[hosted verification run](https://github.com/Y-ash-Y/DecentralizedVotingSystem/actions/runs/37103526694)
+passes tests, coverage, builds, dependency scans, benchmarks and disposable deployment. See
 [verification](docs/VERIFICATION.md) for exact dates, execution limits and status.
 Coverage and passing tests are not security proofs.
 
