@@ -2,10 +2,10 @@
 
 **Wallet-authorized, auditable voting on Ethereum.**
 
-**[Try the interactive demo](https://y-ash-y.github.io/DecentralizedVotingSystem/)** ·
-Run a commit–reveal election with built-in demo accounts. No terminal, MetaMask,
-or test ETH required. Wallet approvals and election phases are simulated in the
-browser using VoteChain's commitment hashing and tally logic.
+**[Open the VoteChain sandbox](https://y-ash-y.github.io/DecentralizedVotingSystem/)** ·
+Use the original admin and voter screens with the compiled voting contract in an
+isolated browser EVM. The sandbox supplies two local accounts and a clock control.
+It needs no terminal, wallet extension, or funds. Reloading starts a new chain.
 
 VoteChain is a full-stack voting application built with Solidity, React and
 ethers.js. Administrators create elections, register candidates and enroll voter

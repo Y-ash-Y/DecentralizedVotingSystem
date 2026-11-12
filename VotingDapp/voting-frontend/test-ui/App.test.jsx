@@ -12,7 +12,7 @@ const state = vi.hoisted(() => ({
 }));
 vi.mock("../src/contract.js", async () => {
   const { keccak256 } = await import("ethers");
-  return { CONTRACT_ADDRESS:state.address, CONTRACT_ABI:[], PROTOCOL_VERSION:2,
+  return { BROWSER_SANDBOX:false, CONTRACT_ADDRESS:state.address, CONTRACT_ABI:[], PROTOCOL_VERSION:2,
     EXPECTED_CODE_HASH:keccak256("0x1234"), NETWORK:{chainId:11155111,hex:"0xaa36a7",name:"Sepolia",symbol:"ETH",rpc:"https://rpc.sepolia.org",explorer:"https://sepolia.etherscan.io",get local(){return state.local;}}, SEPOLIA_CHAIN_ID:11155111, SEPOLIA_HEX:"0xaa36a7",
     SEPOLIA_EXPLORER:"https://sepolia.etherscan.io", SEPOLIA_RPC:"https://rpc.sepolia.org" };
 });

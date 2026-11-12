@@ -6,6 +6,8 @@
 - [abiV2.js](abiV2.js) supplies the scheduled election ABI used by runtime verification and transactions.
 - [lib/](lib/README.md) separates chain, commitment and transaction logic from the UI.
 - [components/](components/README.md) contains shared presentation elements.
+- [sandbox/](sandbox/) supplies a browser-only contract runner, local accounts and
+  clock controls for the hosted sandbox. It uses the same application screens.
 - [style.css](style.css) defines the application styling.
 
 An address alone does not establish that a deployment supports the current UI.

@@ -252,6 +252,7 @@ function Topbar({ account, isAdmin, view, onSwitchView, onDisconnect, loading })
 
 // Election sidebar — defined outside App, receives stable handler refs
 function ElectionSidebar({
+  contractAddress = CONTRACT_ADDRESS,
   elections, selElection, onSelect, onRefresh,
   showCreate, elName, onElNameChange, onCreate, loading,
   crMode, onToggleCrMode,
@@ -354,10 +355,10 @@ function ElectionSidebar({
 
       {/* Footer: contract link */}
       <div style={{ marginTop:"auto", paddingTop:16, borderTop:`1px solid ${C.border}`, fontSize:11, color:C.muted }}>
-        {NETWORK.explorer ? <a href={`${NETWORK.explorer}/address/${CONTRACT_ADDRESS}`} target="_blank" rel="noreferrer"
+        {NETWORK.explorer ? <a href={`${NETWORK.explorer}/address/${contractAddress}`} target="_blank" rel="noreferrer"
            style={{ color:C.gold, textDecoration:"none" }}>
           View contract ↗
-        </a> : <span style={{wordBreak:"break-all"}}>Local contract: {CONTRACT_ADDRESS}</span>}
+        </a> : <span style={{wordBreak:"break-all"}}>Local contract: {contractAddress}</span>}
       </div>
     </div>
   );

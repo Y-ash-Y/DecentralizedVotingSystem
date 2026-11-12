@@ -43,6 +43,8 @@ jobs:
         working-directory: VotingDapp/voting-frontend
       - run: npm run test:browser
         working-directory: VotingDapp/voting-frontend
+      - run: npm run test:sandbox
+        working-directory: VotingDapp/voting-frontend
       - run: npm run test:coverage
         working-directory: VotingDapp/voting-frontend
       - run: npm run benchmark:events
