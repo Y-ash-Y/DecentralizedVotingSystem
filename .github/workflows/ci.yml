@@ -19,12 +19,13 @@ jobs:
         working-directory: VotingDapp
       - run: npm ci --ignore-scripts
         working-directory: VotingDapp/voting-frontend
+      # Installation scripts stay disabled. Apply only our reviewed, pinned patch.
+      - run: npm run deps:patch
+        working-directory: VotingDapp
+      - run: npm run test:tooling
+        working-directory: VotingDapp
       - run: npm run release:check
         working-directory: VotingDapp
-      - run: npm run audit:dependencies
-        working-directory: VotingDapp
-      - run: npm audit --audit-level=low
-        working-directory: VotingDapp/voting-frontend
       - run: npm test
         working-directory: VotingDapp
       - run: npm run test:coverage
@@ -52,3 +53,22 @@ jobs:
         working-directory: VotingDapp
       - run: npm run benchmark:v2
         working-directory: VotingDapp
+  audit:
+    name: Dependency audit (${{ matrix.package }})
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - package: contracts
+            directory: VotingDapp
+          - package: frontend
+            directory: VotingDapp/voting-frontend
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: .nvmrc
+      - run: npm audit --audit-level=low
+        working-directory: ${{ matrix.directory }}

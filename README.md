@@ -12,6 +12,19 @@ transitions, transaction reliability, ballot recovery and reproducible testing.
 It is a **non-binding educational and portfolio application**, not certified
 infrastructure for government or binding institutional elections.
 
+## Start here
+
+- **Try the app:** follow the [local wallet demo](#run-the-local-wallet-demo). It needs no testnet funds or private keys.
+- **Review the protocol:** the [contract guide](VotingDapp/contracts/README.md) explains election scheduling, access control and the local test fixture.
+- **Review transaction safety:** [frontend services](VotingDapp/voting-frontend/src/lib/README.md) covers commitments, recovery, receipts and chain reads.
+- **Run checks:** [contract tests](VotingDapp/test/README.md) and [frontend tests](VotingDapp/voting-frontend/README.md#checks) explain the separate test layers.
+- **Explore the design and limits:** the [documentation index](docs/README.md) links deployment, verification, security and benchmark notes.
+
+The [contract/tooling package](VotingDapp/README.md) and
+[browser package](VotingDapp/voting-frontend/README.md) intentionally keep separate
+`package.json` and lockfiles. Use `npm ci` in each; do not merge their dependency
+trees or publish local `.env`, ballot backups or demo-session files.
+
 ## Features
 
 - **Wallet-based access:** administrator and voter views follow the connected
@@ -74,6 +87,7 @@ From the repository root, install both dependency trees:
 ```sh
 cd VotingDapp
 npm ci --ignore-scripts
+npm run deps:patch
 cd voting-frontend
 npm ci --ignore-scripts
 cd ..
@@ -139,11 +153,11 @@ npx playwright install chromium
 npm run test:browser
 ```
 
-The recorded checks include **181 passing cases**: 97 contract/local-EVM,
+The October verification recorded **181 passing cases**: 97 contract/local-EVM,
 52 service, 29 simulated UI and 3 browser viewport cases. A separate 96-case
 instrumented run reports 100% contract lines/statements. The
 [hosted verification run](https://github.com/Y-ash-Y/DecentralizedVotingSystem/actions/runs/37103526694)
-passes tests, coverage, builds, dependency scans, benchmarks and disposable deployment. See
+passed tests, coverage, builds, dependency scans, benchmarks and disposable deployment. See
 [verification](docs/VERIFICATION.md) for exact dates, execution limits and status.
 Coverage and passing tests are not security proofs.
 
@@ -169,6 +183,16 @@ Use the supplied environment templates and a dedicated testnet wallet.
 Never place private keys or secret RPC credentials in public `VITE_` variables.
 
 ## Security and scope
+
+CI reports application verification and both dependency audits separately.
+The contract-tooling audit flags Hardhat's Zod dependency. The frontend audit
+reported zero findings in the latest local check. See
+[dependency status](docs/DEPENDENCIES.md) for the advisory and its scope.
+
+A pinned [local Zod mitigation](VotingDapp/patches/README.md) rejects oversized
+bounded v3 arrays/sets before parsing their elements. It is not a complete
+resource-exhaustion fix or an npm audit waiver. Contract `npm test` applies it
+and runs 39 additional tooling checks before the existing contract suite.
 
 - Commit–reveal delays disclosure; it does **not** provide anonymity, permanent
   secrecy, receipt-freeness or coercion resistance.
@@ -200,6 +224,9 @@ VotingDapp/
 docs/                 Architecture, security, deployment and verification
 .github/workflows/    Continuous integration
 ```
+
+Each main code area has a README with its purpose, entry points and verification
+commands.
 
 ## Documentation and licensing
 

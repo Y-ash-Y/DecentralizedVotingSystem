@@ -1,5 +1,9 @@
 # Verification — 3 October 2026
 
+The results below describe the October verification run. For the current
+dependency audit and mitigation, see [dependency status](DEPENDENCIES.md) and
+the [patch notes](../VotingDapp/patches/README.md).
+
 ## Observed results
 
 | Check | Result and scope |
@@ -60,6 +64,7 @@ Use Node 22.22.2, as recorded in the root .nvmrc. From the repository root:
 ```sh
 cd VotingDapp
 npm ci --ignore-scripts
+npm run deps:patch
 cd voting-frontend
 npm ci --ignore-scripts
 cd ..

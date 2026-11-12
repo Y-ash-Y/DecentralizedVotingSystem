@@ -12,7 +12,12 @@
     "demo:ui": "node scripts/local-demo.cjs ui",
     "demo:phase": "node scripts/local-demo.cjs phase",
     "demo:status": "node scripts/local-demo.cjs status",
+    "deps:patch": "node scripts/patch-zod.cjs --apply",
+    "deps:check": "node scripts/patch-zod.cjs --check",
+    "test:tooling": "node --test test-tooling/*.test.mjs",
+    "pretest": "npm run deps:patch && npm run test:tooling",
     "test": "hardhat test --network hardhat",
+    "pretest:coverage": "npm run deps:check",
     "test:coverage": "hardhat test mocha --network hardhat --coverage --grep-exclude 'deployment fits the EVM 24KB'",
     "audit:dependencies": "npm audit --audit-level=low",
     "benchmark": "hardhat run scripts/benchmark.js --network hardhat",
@@ -25,16 +30,22 @@
   "author": "",
   "license": "MPL-2.0",
   "devDependencies": {
-    "@nomicfoundation/hardhat-ethers": "4.2.0",
-    "@nomicfoundation/hardhat-ethers-chai-matchers": "3.0.11",
-    "@nomicfoundation/hardhat-mocha": "4.0.0",
+    "@nomicfoundation/hardhat-ethers": "4.2.2",
+    "@nomicfoundation/hardhat-ethers-chai-matchers": "3.0.13",
+    "@nomicfoundation/hardhat-mocha": "4.0.1",
     "chai": "6.2.2",
-    "mocha": "12.0.2",
+    "mocha": "12.0.3",
     "ethers": "6.17.0",
-    "hardhat": "3.18.0"
+    "hardhat": "3.21.2"
   },
   "dependencies": {
     "dotenv": "17.3.1"
+  },
+  "overrides": {
+    "mocha": {
+      "glob": "14.0.2",
+      "minimatch": "11.0.1"
+    }
   },
   "private": true
 }
