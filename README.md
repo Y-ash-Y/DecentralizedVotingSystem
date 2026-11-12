@@ -2,6 +2,11 @@
 
 **Wallet-authorized, auditable voting on Ethereum.**
 
+**[Try the interactive demo](https://y-ash-y.github.io/DecentralizedVotingSystem/)** ·
+Run a commit–reveal election with built-in demo accounts. No terminal, MetaMask,
+or test ETH required. Wallet approvals and election phases are simulated in the
+browser using VoteChain's commitment hashing and tally logic.
+
 VoteChain is a full-stack voting application built with Solidity, React and
 ethers.js. Administrators create elections, register candidates and enroll voter
 wallets. Voters cast plain ballots or use commit–reveal voting, and anyone can
@@ -14,7 +19,7 @@ infrastructure for government or binding institutional elections.
 
 ## Start here
 
-- **Try the app:** follow the [local wallet demo](#run-the-local-wallet-demo). It needs no testnet funds or private keys.
+- **Try real wallet approvals:** follow the [local MetaMask walkthrough](#run-the-local-wallet-demo). It uses a disposable local chain and public wallet addresses.
 - **Review the protocol:** the [contract guide](VotingDapp/contracts/README.md) explains election scheduling, access control and the local test fixture.
 - **Review transaction safety:** [frontend services](VotingDapp/voting-frontend/src/lib/README.md) covers commitments, recovery, receipts and chain reads.
 - **Run checks:** [contract tests](VotingDapp/test/README.md) and [frontend tests](VotingDapp/voting-frontend/README.md#checks) explain the separate test layers.
