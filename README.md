@@ -1,248 +1,133 @@
 # VoteChain
 
-**Wallet-authorized, auditable voting on Ethereum.**
+**An Ethereum voting application with scheduled elections, wallet-based access, and auditable tallies.**
 
-**[Open the VoteChain sandbox](https://y-ash-y.github.io/DecentralizedVotingSystem/)** ·
-Use the original admin and voter screens with the compiled voting contract in an
-isolated browser EVM. The sandbox supplies two local accounts and a clock control.
-It needs no terminal, wallet extension, or funds. Reloading starts a new chain.
+**[Open the live sandbox](https://y-ash-y.github.io/DecentralizedVotingSystem/)** ·
+[Architecture](docs/ENGINEERING.md) · [Verification](docs/VERIFICATION.md) ·
+[Security review](docs/SECURITY-REVIEW.md)
 
-VoteChain is a full-stack voting application built with Solidity, React and
-ethers.js. Administrators create elections, register candidates and enroll voter
-wallets. Voters cast plain ballots or use commit–reveal voting, and anyone can
-inspect the public blockchain record.
+VoteChain pairs a React interface with Solidity contracts. Administrators
+register candidates and enroll voter wallets, then seal the election before
+it starts. Eligible voters can cast a public ballot or commit to a choice and
+reveal it later. The contract enforces who can act, when they can act, and
+which ballots count.
 
-This project demonstrates smart-contract authorization, scheduled state
-transitions, transaction reliability, ballot recovery and reproducible testing.
-It is a **non-binding educational and portfolio application**, not certified
-infrastructure for government or binding institutional elections.
+## Try it in your browser
 
-## Start here
+The sandbox runs the **same interface and compiled voting contract** in an
+isolated Ethereum Virtual Machine inside your browser. GitHub Pages serves the
+app, and each tab gets its own chain. No wallet extension, account signup,
+terminal, or test ETH is needed.
 
-- **Try real wallet approvals:** follow the [local MetaMask walkthrough](#run-the-local-wallet-demo). It uses a disposable local chain and public wallet addresses.
-- **Review the protocol:** the [contract guide](VotingDapp/contracts/README.md) explains election scheduling, access control and the local test fixture.
-- **Review transaction safety:** [frontend services](VotingDapp/voting-frontend/src/lib/README.md) covers commitments, recovery, receipts and chain reads.
-- **Run checks:** [contract tests](VotingDapp/test/README.md) and [frontend tests](VotingDapp/voting-frontend/README.md#checks) explain the separate test layers.
-- **Explore the design and limits:** the [documentation index](docs/README.md) links deployment, verification, security and benchmark notes.
+1. Enter as **Demo Admin**. Create a commit–reveal election, register at least
+   two candidates, authorize the displayed voter address, and select **Seal Setup**.
+2. Switch to **Demo Voter**, open the election, and use **Advance 1 minute**
+   to reach the voting window. Select a candidate and commit your vote.
+3. Advance to reveal, load the saved ballot, and reveal it. Advance past
+   closing to see the final tally.
 
-The [contract/tooling package](VotingDapp/README.md) and
-[browser package](VotingDapp/voting-frontend/README.md) intentionally keep separate
-`package.json` and lockfiles. Use `npm ci` in each; do not merge their dependency
-trees or publish local `.env`, ballot backups or demo-session files.
+Reloading the sandbox resets the chain and its in-memory ballot backups.
+For actual wallet signatures, use the [local MetaMask walkthrough](#run-the-local-wallet-demo).
 
-## Features
+## Architecture
 
-- **Wallet-based access:** administrator and voter views follow the connected
-  account; smart contracts enforce permissions independently of the interface.
-- **Election administration:** candidate and voter batches, delegated election
-  administrators, role revocation and two-step ownership transfer.
-- **Sealed setup:** candidate and eligibility lists become immutable before voting.
-- **Scheduled phases:** voting, reveal and closing follow blockchain timestamps.
-  Positive whole-second intervals are supported; short windows require care.
-- **Two ballot modes:** direct public voting or domain-separated commit–reveal
-  ballots with cryptographically random secrets.
-- **Recovery-aware transactions:** save-before-sign backups, successful-receipt
-  checks, equivalent fee-replacement handling and duplicate-submit protection.
-- **Auditable results:** bounded event pagination, reorganization-aware caching,
-  consistent tally snapshots, ties and zero-turnout outcomes.
-- **Automatic local demo:** blocks and phase checks run every two seconds, so
-  scheduled elections progress while wallets are idle.
+```mermaid
+flowchart LR
+    UI["React admin and voter views"] --> Services["ethers.js and frontend services"]
+    Services --> Wallet["MetaMask and Ethereum RPC"]
+    Services --> Sandbox["Isolated browser EVM"]
+    Wallet --> Deployed["Deployed voting contract"]
+    Sandbox --> Local["Compiled voting contract"]
+```
 
-## How voting works
-
-1. The administrator creates an election with its mode and schedule.
-2. Candidates and eligible wallet addresses are registered.
-3. The administrator reviews and seals setup before the start time.
-4. During voting, each eligible wallet submits one ballot or one commitment.
-5. For commit–reveal elections, voters return during the reveal window with the
-   matching candidate and secret. Unrevealed commitments do not count.
-6. After closing, the interface displays the counted results.
-
-A commitment is a hash that binds the choice and secret to the wallet, election,
-contract and chain. It temporarily conceals the choice; revealing publishes it.
-An address alone is not a login credential—the voter must control its wallet.
-
-## Technology
-
-| Layer | Tools |
+| Component | Responsibility |
 | --- | --- |
-| Smart contracts | Solidity 0.8.20, Ethereum EVM |
-| Contract development | Hardhat, ethers.js, Mocha, Chai |
-| Interface | React, Vite, JavaScript |
-| Wallet integration | MetaMask-compatible Ethereum provider |
-| Testing | Local-EVM integration, Node tests, Vitest, Testing Library, Playwright |
-| Security checks | Slither, dependency advisory scans, publication preflight |
-| Continuous integration | GitHub Actions |
+| [Solidity contracts](VotingDapp/contracts/README.md) | Enforce wallet roles, sealed setup, phase deadlines, ballot validity, and tallying. |
+| [Frontend services](VotingDapp/voting-frontend/src/lib/README.md) | Bind commitments to the election, wallet, contract, and chain. Preserve recovery data before submitting and check transaction receipts. |
+| [Chain reads](VotingDapp/voting-frontend/src/lib/chainData.js) | Page event logs, recheck cached checkpoints after chain reorganizations, and read final tallies at a fixed block. |
+| [Browser sandbox](VotingDapp/voting-frontend/src/sandbox/) | Execute the voting bytecode with two local accounts and adjustable chain time. |
 
-The interface delegates commitment handling, deployment validation, event reads,
-transaction receipts and result calculation to focused service modules. The
-contract is the final authority for every state-changing action.
+**Design trade-offs.** Sealing freezes candidates and eligibility so an
+administrator cannot change them once voting is underway. Scheduled transitions
+follow block timestamps, so the administrator need not send a transaction to
+open each phase. Commit–reveal hides choices during voting, at the cost of a
+second transaction and a secret the voter must retain. Only valid reveals count.
+
+**Measured gas cost.** Authorizing ten addresses used **311,139 gas** in a
+batch versus **621,530 gas** across ten individual transactions, a **49.94%
+reduction** in the controlled local benchmark. See the
+[benchmark setup and limits](docs/BENCHMARKS.md).
+
+## Tests and build
+
+The test suite covers the contract and local EVM, frontend services, wallet and
+receipt handling, browser layouts, and an end-to-end election through the
+browser sandbox. CI reports verification, the contract dependency audit, and
+the frontend dependency audit separately.
+[Reference GitHub Actions run](https://github.com/Y-ash-Y/DecentralizedVotingSystem/actions/runs/43229873828).
+
+Use the Node.js version pinned in [`.nvmrc`](.nvmrc). Install both packages
+and apply the reviewed contract-tooling patch.
+
+```sh
+npm ci --ignore-scripts --prefix VotingDapp
+npm ci --ignore-scripts --prefix VotingDapp/voting-frontend
+npm --prefix VotingDapp run deps:patch
+```
+
+From the repository root:
+
+```sh
+npm --prefix VotingDapp test
+npm --prefix VotingDapp/voting-frontend test
+npm --prefix VotingDapp/voting-frontend run test:ui
+npm --prefix VotingDapp/voting-frontend run build
+```
+
+To reproduce the browser checks after the ordinary contract test compiles
+the Solidity artifacts:
+
+```sh
+cd VotingDapp/voting-frontend
+npx playwright install chromium
+npm run test:browser
+npm run test:sandbox
+```
+
+See [verification](docs/VERIFICATION.md) for coverage, deployment smoke checks,
+and benchmark reproduction.
 
 ## Run the local wallet demo
 
-### Requirements
-
-- Node.js **22.22.2** (recorded in `.nvmrc`), npm and MetaMask.
-- Two dedicated wallet accounts: one administrator and one voter.
-- Use **public addresses only** in setup commands. No keys or seed phrases are
-  needed, and the local ETH balance has no monetary value.
-
-From the repository root, install both dependency trees:
-
-```sh
-cd VotingDapp
-npm ci --ignore-scripts
-npm run deps:patch
-cd voting-frontend
-npm ci --ignore-scripts
-cd ..
-```
-
-In **terminal 1**, leave the local blockchain running:
-
-```sh
-npm run demo:node
-```
-
-In **terminal 2**, from the same `VotingDapp` directory, replace the placeholders
-with your public addresses:
+Use the same installations above and two MetaMask accounts. From `VotingDapp`,
+leave `npm run demo:node` running in one terminal. In a second terminal, run:
 
 ```sh
 npm run demo:setup -- <ADMIN_PUBLIC_ADDRESS> <VOTER_PUBLIC_ADDRESS>
 npm run demo:ui
 ```
 
-Open **http://127.0.0.1:5174** and confirm the **LOCAL TEST ONLY** banner.
-
-| MetaMask network field | Value |
-| --- | --- |
-| Name | VoteChain Local Demo |
-| RPC URL | http://127.0.0.1:8545 |
-| Chain ID | 31337 |
-| Currency | ETH |
-| Explorer | Leave blank |
-
-Create an election with enough setup time, add candidates and voters, then
-**seal setup before its start**. Keep the node running and the computer awake.
-Voting, reveal and closing appear automatically as blocks cross their deadlines;
-no administrator phase transaction or manual clock command is required.
-
-Restarting the local node discards its in-memory elections. The setup script
-detects stale session metadata and refuses to overwrite elections on the same
-running node. Preserve any ballot backups you still need. See the
-[wallet walkthrough](docs/MANUAL-WALLET-TESTS.md) for acceptance and recovery cases.
-
-## Tests and build
-
-From `VotingDapp`:
-
-```sh
-npm test
-npm run test:coverage
-npm test
-npm run release:check
-npm run benchmark:current
-cd voting-frontend
-npm test
-npm run test:ui
-npm run build
-```
-
-The second ordinary contract run restores non-instrumented artifacts after
-coverage. Automated tests need no wallet, API key or testnet funds.
-
-Browser smoke tests use an isolated simulated wallet:
-
-```sh
-npx playwright install chromium
-npm run test:browser
-```
-
-The October verification recorded **181 passing cases**: 97 contract/local-EVM,
-52 service, 29 simulated UI and 3 browser viewport cases. A separate 96-case
-instrumented run reports 100% contract lines/statements. The
-[hosted verification run](https://github.com/Y-ash-Y/DecentralizedVotingSystem/actions/runs/37103526694)
-passed tests, coverage, builds, dependency scans, benchmarks and disposable deployment. See
-[verification](docs/VERIFICATION.md) for exact dates, execution limits and status.
-Coverage and passing tests are not security proofs.
-
-## Measured gas cost
-
-Authorizing ten fresh addresses in a single batch used **311,139 gas**, compared
-with **621,530 gas** across individual transactions: **49.94% less** in the
-controlled local fixture. A one-address batch costs slightly more because of
-array overhead. These are execution-cost measurements, not live throughput
-guarantees. Reproduce and interpret them using [benchmarks](docs/BENCHMARKS.md).
-
-## Sepolia deployment
-
-The local demo is the reference workflow for the scheduled voting protocol.
-For Sepolia, deploy the intended contract and configure the browser from its
-actual deployment manifest: address, protocol/ABI selection, deployment block
-and runtime-code hash must agree. Follow the
-[deployment and recovery guide](docs/DEPLOYMENT.md); do not assume that an
-arbitrary configured address supports every feature above.
-
-Deployment credentials belong only in the ignored repository-root `.env`.
-Use the supplied environment templates and a dedicated testnet wallet.
-Never place private keys or secret RPC credentials in public `VITE_` variables.
+Open the app at **http://127.0.0.1:5174**. Use the MetaMask custom RPC
+`http://127.0.0.1:8545` with chain ID `31337` and currency `ETH`. The local
+balances have no monetary value. Supply public addresses only. The
+[wallet walkthrough](docs/MANUAL-WALLET-TESTS.md) covers setup, phase timing,
+and ballot recovery. The [Sepolia runbook](docs/DEPLOYMENT.md) covers public
+testnet configuration and deployment.
 
 ## Security and scope
 
-CI reports application verification and both dependency audits separately.
-The contract-tooling audit flags Hardhat's Zod dependency. The frontend audit
-reported zero findings in the latest local check. See
-[dependency status](docs/DEPENDENCIES.md) for the advisory and its scope.
+VoteChain is an educational prototype for non-binding elections. Eligibility
+depends on an administrator's enrollment decisions. Commit–reveal provides
+temporary concealment, and the reveal exposes the choice and wallet on-chain.
+Real-wallet ballot backups are plaintext. Keep backups and deployment credentials
+private. The project has internal review and automated checks.
 
-A pinned [local Zod mitigation](VotingDapp/patches/README.md) rejects oversized
-bounded v3 arrays/sets before parsing their elements. It is not a complete
-resource-exhaustion fix or an npm audit waiver. Contract `npm test` applies it
-and runs 39 additional tooling checks before the existing contract suite.
+The contract tooling currently flags a [Zod memory-exhaustion advisory](https://github.com/advisories/GHSA-mrhx-c7xc-m3w5).
+The local mitigation covers bounded Zod collections. The strict audit still
+reports the advisory, and the hosted browser bundle uses a separate dependency
+tree. See the [dependency notes](docs/DEPENDENCIES.md) for the scope and policy.
 
-- Commit–reveal delays disclosure; it does **not** provide anonymity, permanent
-  secrecy, receipt-freeness or coercion resistance.
-- Wallet enrollment is trusted. One wallet is not proof of one eligible person.
-- Browser and downloaded ballot backups are plaintext. Losing a secret or missing
-  a reveal deadline can prevent a ballot from being counted.
-- RPC outages, compromised devices, chain reorganizations and dishonest enrollment
-  remain operational risks.
-- The project has internal source review and automated security checks, not an
-  independent audit or production-election certification.
+## License
 
-Keep `.env`, keys, ballot backups, local sessions, dependencies and generated
-output out of Git. Previously exposed credentials must be retired; adding an
-ignore rule does not revoke them. See [security review](docs/SECURITY-REVIEW.md).
-
-## Repository layout
-
-```text
-VotingDapp/
-  contracts/          Voting contracts and local-only fixture
-  scripts/            Deployment, demo, benchmark and security utilities
-  test/               Contract and local-EVM integration tests
-  voting-frontend/
-    src/components/   Shared interface components
-    src/lib/          Chain reads, commitments, transactions and validation
-    test/             Service tests
-    test-ui/          Simulated interface tests
-    test-browser/     Browser smoke and layout checks
-docs/                 Architecture, security, deployment and verification
-.github/workflows/    Continuous integration
-```
-
-Each main code area has a README with its purpose, entry points and verification
-commands.
-
-## Documentation and licensing
-
-[Architecture](docs/ENGINEERING.md) ·
-[Deployment](docs/DEPLOYMENT.md) ·
-[Wallet testing](docs/MANUAL-WALLET-TESTS.md) ·
-[Verification](docs/VERIFICATION.md) ·
-[Benchmarks](docs/BENCHMARKS.md) ·
-[Security](docs/SECURITY-REVIEW.md)
-
-The repository contains existing mixed license declarations: the root
-[LICENSE](LICENSE) is MIT, while the nested [project license](VotingDapp/LICENSE),
-Solidity source headers and package metadata declare MPL-2.0. These declarations
-are preserved; consult the relevant files rather than assuming one uniform license.
+The root [license](LICENSE) declares MIT. The nested [project license](VotingDapp/LICENSE),
+Solidity source headers, and package metadata declare MPL-2.0.
