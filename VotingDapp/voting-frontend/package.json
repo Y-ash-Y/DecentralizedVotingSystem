@@ -11,6 +11,7 @@
     "test:ui": "vitest run",
     "dev": "vite",
     "build": "vite build",
+    "build:demo": "vite build demo --base ./ --outDir ../dist/sandbox --emptyOutDir",
     "preview": "vite preview"
   },
   "devDependencies": {
