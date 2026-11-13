@@ -5,6 +5,7 @@ import { commitmentKey, loadCommitment, prepareCommitment } from "./lib/commitme
 import { verifyDeployment, enrichElections } from "./lib/deployment.js";
 import { summarizeResults } from "./lib/results.js";
 import { confirmedReceipt, transactionError } from "./lib/transactions.js";
+import { assertWalletChain, chainBoundWallet } from "./lib/walletChain.js";
 import { safeErrorDetail } from "./lib/errors.js";
 import {
   BROWSER_SANDBOX, CONTRACT_ADDRESS as defaultAddress, CONTRACT_ABI,
@@ -103,7 +104,9 @@ export default function App({ sandbox }) {
 
   const getReadContract = async () => {
     if (!sandbox) await ensureNetwork();
-    const runner = sandbox?.runner ?? new ethers.BrowserProvider(window.ethereum);
+    const runner = sandbox?.runner ?? new ethers.BrowserProvider(
+      chainBoundWallet(window.ethereum, NETWORK.chainId), NETWORK.chainId
+    );
     const contract = new ethers.Contract(CONTRACT_ADDRESS, CONTRACT_ABI, runner);
     await verifyDeployment(contract, {address:CONTRACT_ADDRESS, chainId:NETWORK.chainId, version:PROTOCOL_VERSION, codeHash:EXPECTED_CODE_HASH, fastLocal:NETWORK.fastLocal});
     return contract;
@@ -112,8 +115,9 @@ export default function App({ sandbox }) {
   const getSignerContract = async () => {
     const verifiedContract = await getReadContract();
     if (sandbox) return verifiedContract;
-    const p = new ethers.BrowserProvider(window.ethereum);
+    const p = verifiedContract.runner;
     const signer = await p.getSigner();
+    await assertWalletChain(window.ethereum, NETWORK.chainId);
     if ((await signer.getAddress()).toLowerCase() !== accountRef.current.toLowerCase()) {
       throw Object.assign(new Error("Wallet changed"), {code:"WALLET_CHANGED"});
     }

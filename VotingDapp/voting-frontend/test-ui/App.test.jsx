@@ -44,9 +44,12 @@ vi.mock("ethers", async original => {
   const actual = await original();
   const runner = {getAddress:async()=>state.account,getNetwork:async()=>({chainId:11155111n}),getCode:async()=>"0x1234",getBlockNumber:async()=>1,getBlock:async()=>({hash:"stable",timestamp:Math.floor(Date.now()/1000)})};
   runner.provider = runner;
-  class BrowserProvider { constructor(){Object.assign(this,runner);} async getSigner(){return runner;} }
+  class BrowserProvider {
+    constructor(){Object.assign(this,runner);}
+    async getSigner(){if(state.switchChainOnSigner)state.wrongChain=true;return runner;}
+  }
   class Contract {
-    constructor(){this.runner=runner;}
+    constructor(_address,_abi,contractRunner){this.runner=contractRunner;}
     async protocolVersion(){return 2n;}
     async MIN_PHASE_DURATION(){return state.minimumPhase;}
     async superAdmin(){return state.owner;}
@@ -67,6 +70,7 @@ import App from "../src/app.jsx";
 
 beforeEach(()=>{
   state.local=false;
+  state.switchChainOnSigner=false;
   state.minimumPhase=1n;
   state.rejectMessage="";
   Object.assign(state,{account:state.owner,events:[],phase:0,sealed:false,mode:true,exists:false,authorized:false,committed:false,voted:false,reject:false,wrongChain:false,calls:[],tally:0,bobTally:0,admin:false,failedResults:false,waitMode:"success",resolveReceipt:null,rejectWrite:false});
@@ -262,6 +266,13 @@ describe("App integration with an isolated wallet/contract simulator",()=>{
     fireEvent.click(screen.getAllByRole("button",{name:"Select"})[0]);state.account=state.owner;
     fireEvent.click(screen.getByRole("button",{name:/Commit Vote/}));
     await screen.findByText(/Wallet account changed/);expect(state.calls).toEqual([]);expect(localStorage.length).toBe(1);
+  });
+  it("blocks a chain switch during signer acquisition and preserves the commit backup",async()=>{
+    state.account=state.voter;state.phase=1;state.sealed=true;seed();render(<App/>);await connect();await clickElection();
+    await waitFor(()=>expect(screen.getAllByRole("button",{name:"Select"})).toHaveLength(2));
+    fireEvent.click(screen.getAllByRole("button",{name:"Select"})[0]);state.switchChainOnSigner=true;
+    fireEvent.click(screen.getByRole("button",{name:/Commit Vote/}));
+    await screen.findByText(/Wallet network changed/);expect(state.calls).toEqual([]);expect(localStorage.length).toBe(1);
   });
   it("zero turnout does not manufacture a leading candidate in the admin statistics",async()=>{
     state.phase=3;state.sealed=true;seed();render(<App/>);await connect();

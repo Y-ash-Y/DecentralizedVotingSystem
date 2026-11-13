@@ -22,6 +22,10 @@ export function transactionError(error) {
   if (error?.code === "INSUFFICIENT_FUNDS") return "Insufficient test-network ETH for gas.";
   if (error?.code === "TRANSACTION_REPLACED") return "Transaction cancelled or replaced. Check wallet history before retrying; your backup is preserved.";
   if (error?.code === "WALLET_CHANGED") return "Wallet account changed. Reconnect the intended account before submitting.";
+  if (error?.code === 4901 || (error?.code === "UNKNOWN_ERROR" && error.error?.code === 4901) ||
+      (error?.code === "NETWORK_ERROR" && error.event === "changed")) {
+    return "Wallet network changed. Switch back to the election network before submitting.";
+  }
   if (error?.code === "RECEIPT_FAILED") return "Transaction was not confirmed successfully. Check wallet history before retrying.";
   if (contractReasons.has(error?.reason)) return error.reason;
   return "Transaction could not be confirmed. Check the wallet for rejection, pending status or a revert before retrying. Keep your backup.";
