@@ -7,13 +7,14 @@ export async function assertWalletChain(wallet, chainId) {
   }
 }
 
-export function chainBoundWallet(wallet, chainId) {
+export function chainBoundWallet(wallet, chainId, onApproval) {
   return {
     async request(payload) {
       if (payload.method !== "eth_sendTransaction") return wallet.request(payload);
       // Check at the RPC boundary, after ethers has acquired the signer and
       // estimated gas. Also send the intended chain to the wallet.
       await assertWalletChain(wallet, chainId);
+      onApproval?.();
       return wallet.request({
         method: payload.method,
         params: [{ ...payload.params[0], chainId: toQuantity(chainId) }],

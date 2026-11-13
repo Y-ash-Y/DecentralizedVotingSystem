@@ -254,6 +254,7 @@ function Topbar({ account, isAdmin, view, onSwitchView, onDisconnect, loading })
 function ElectionSidebar({
   contractAddress = CONTRACT_ADDRESS,
   elections, selElection, onSelect, onRefresh,
+  historyState,
   showCreate, elName, onElNameChange, onCreate, loading,
   crMode, onToggleCrMode,
   schedule, onSchedule,
@@ -305,7 +306,7 @@ function ElectionSidebar({
         <div style={{ fontSize:11, fontWeight:700, color:C.gold, textTransform:"uppercase", letterSpacing:"0.1em" }}>
           Elections
         </div>
-        <Btn size="sm" variant="ghost" onClick={onRefresh}>↻</Btn>
+        <Btn size="sm" variant="ghost" onClick={onRefresh} disabled={historyState === "loading"}>↻</Btn>
       </div>
 
       {/* Hide-ended toggle */}
@@ -320,9 +321,11 @@ function ElectionSidebar({
       )}
 
       {/* Election list */}
+      {historyState === "loading" && <p role="status" style={{ color:C.muted, fontSize:13 }}>Loading elections…</p>}
+      {historyState === "error" && <p role="status" style={{ color:C.muted, fontSize:13 }}>Election history unavailable. Use refresh to retry.</p>}
       {visible.length===0 ? (
         <div style={{ color:C.muted, fontSize:13, lineHeight:1.7, padding:"8px 0" }}>
-          {elections.length===0 ? "No elections yet." : "All elections are hidden."}
+          {historyState === "ready" && (elections.length===0 ? "No elections yet." : "All elections are hidden.")}
         </div>
       ) : (
         visible.map(el => (

@@ -12,7 +12,7 @@ const state = vi.hoisted(() => ({
 }));
 vi.mock("../src/contract.js", async () => {
   const { keccak256 } = await import("ethers");
-  return { BROWSER_SANDBOX:false, CONTRACT_ADDRESS:state.address, CONTRACT_ABI:[], PROTOCOL_VERSION:2,
+  return { BROWSER_SANDBOX:false, CONTRACT_ADDRESS:state.address, CONTRACT_ABI:[], PROTOCOL_VERSION:2, DEPLOYMENT_BLOCK:undefined,
     EXPECTED_CODE_HASH:keccak256("0x1234"), NETWORK:{chainId:11155111,hex:"0xaa36a7",name:"Sepolia",symbol:"ETH",rpc:"https://rpc.sepolia.org",explorer:"https://sepolia.etherscan.io",get local(){return state.local;}}, SEPOLIA_CHAIN_ID:11155111, SEPOLIA_HEX:"0xaa36a7",
     SEPOLIA_EXPLORER:"https://sepolia.etherscan.io", SEPOLIA_RPC:"https://rpc.sepolia.org" };
 });
@@ -38,7 +38,7 @@ function receipt(apply=()=>{}) {
 }
 vi.mock("../src/lib/chainData.js", async original => {
   const real = await original();
-  return { ...real, createEventReader:()=>({invalidate:()=>{}, read:async()=>state.events}) };
+  return { ...real, createEventReader:()=>({invalidate:()=>{}, read:async()=>state.history ?? state.events}) };
 });
 vi.mock("ethers", async original => {
   const actual = await original();
@@ -70,6 +70,7 @@ import App from "../src/app.jsx";
 
 beforeEach(()=>{
   state.local=false;
+  state.history=null;
   state.switchChainOnSigner=false;
   state.minimumPhase=1n;
   state.rejectMessage="";
@@ -87,6 +88,41 @@ const clickElection=async()=>{fireEvent.click(screen.getByText("Council",{exact:
 function seed(mode=true){state.exists=true;state.mode=mode;event("ElectionCreated",{name:"Council",commitReveal:mode});event("CandidateAdded",{candidateId:1n,name:"Alice"});event("CandidateAdded",{candidateId:2n,name:"Bob"});event("VoterAuthorized",{voter:state.voter});}
 
 describe("App integration with an isolated wallet/contract simulator",()=>{
+  it("switches to the voter in place and reopens the selected election without requesting wallet access again", async () => {
+    state.phase=1;state.sealed=true;seed();render(<App/>);await connect();
+    fireEvent.click(await screen.findByText("Council",{exact:true}));
+    await screen.findByRole("heading",{name:"Council"});
+    const onAccountChange = window.ethereum.on.mock.calls.find(([eventName])=>eventName==="accountsChanged")[1];
+    state.account=state.voter;
+    await act(async()=>onAccountChange([state.voter]));
+    await screen.findByText("Voting as:");
+    expect(screen.queryByRole("button",{name:"Admin",exact:true})).toBeNull();
+    expect(screen.getAllByRole("button",{name:"Select",exact:true})).toHaveLength(2);
+    expect(window.ethereum.request.mock.calls.filter(([request])=>request.method==="eth_requestAccounts")).toHaveLength(1);
+  });
+  it("opens the dashboard while election history is pending", async () => {
+    seed();
+    let finish;
+    state.history = new Promise(resolve => { finish = resolve; });
+    render(<App/>);
+    await connect();
+    expect(screen.getByText("Loading elections…")).toBeTruthy();
+    expect(screen.queryByText("No elections yet.")).toBeNull();
+    await act(async () => finish(state.events));
+    await screen.findByText("Council", { exact: true });
+    expect(screen.queryByText("Loading elections…")).toBeNull();
+  });
+  it("ignores election history from a disconnected wallet session", async () => {
+    seed();
+    let finish;
+    state.history = new Promise(resolve => { finish = resolve; });
+    render(<App/>);
+    await connect();
+    fireEvent.click(screen.getByRole("button", { name: "Disconnect" }));
+    await act(async () => finish(state.events));
+    expect(screen.getByRole("button", { name: "Connect MetaMask" })).toBeTruthy();
+    expect(screen.queryByText("Council", { exact: true })).toBeNull();
+  });
   it("local polling updates scheduled phases without a refresh click",async()=>{
     state.local=true;state.account=state.voter;state.phase=0;state.sealed=true;seed();
     let poll;

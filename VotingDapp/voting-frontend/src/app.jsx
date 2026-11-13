@@ -9,7 +9,7 @@ import { assertWalletChain, chainBoundWallet } from "./lib/walletChain.js";
 import { safeErrorDetail } from "./lib/errors.js";
 import {
   BROWSER_SANDBOX, CONTRACT_ADDRESS as defaultAddress, CONTRACT_ABI,
-  PROTOCOL_VERSION, EXPECTED_CODE_HASH as defaultCodeHash,
+  PROTOCOL_VERSION, EXPECTED_CODE_HASH as defaultCodeHash, DEPLOYMENT_BLOCK,
   NETWORK,
 } from "./contract.js";
 
@@ -25,8 +25,8 @@ export default function App({ sandbox }) {
   const EXPECTED_CODE_HASH = sandbox?.codeHash ?? defaultCodeHash;
   const [eventReader] = useState(() => createEventReader({
     address: CONTRACT_ADDRESS,
-    deploymentBlock: sandbox?.deploymentBlock ??
-      (import.meta.env.VITE_DEPLOYMENT_BLOCK ? Number(import.meta.env.VITE_DEPLOYMENT_BLOCK) : undefined),
+    deploymentBlock: sandbox?.deploymentBlock ?? DEPLOYMENT_BLOCK,
+    getStorage: NETWORK.local ? undefined : () => window.localStorage,
   }));
   const ballotStorage = () => sandbox?.storage ?? window.localStorage;
   // ── Auth ──
@@ -46,6 +46,7 @@ export default function App({ sandbox }) {
 
   // ── Data ──
   const [elections,   setElections]   = useState([]);
+  const [historyState, setHistoryState] = useState("loading");
   const [selElection, setSelElection] = useState(null);
   const [candidates,  setCandidates]  = useState([]);
   const [voters,      setVoters]      = useState([]);
@@ -69,19 +70,10 @@ export default function App({ sandbox }) {
   const selectionVersion = useRef(0);
   const resultRequest = useRef(0);
   const electionRequest = useRef(0);
+  const verifiedContractRef = useRef(null);
+  const fixedOwnerRef = useRef("");
   const transactionInFlight = useRef(false);
-
-  // ── MetaMask listeners ─────────────────────────────────────────────────────
-  useEffect(() => {
-    if (sandbox || !window.ethereum) return;
-    const reload = () => window.location.reload();
-    window.ethereum.on("chainChanged",    reload);
-    window.ethereum.on("accountsChanged", reload);
-    return () => {
-      window.ethereum.removeListener("chainChanged",    reload);
-      window.ethereum.removeListener("accountsChanged", reload);
-    };
-  }, []);
+  const walletSession = useRef(0);
 
   // Results getter is only available after Ended. Do not poll a known revert.
 
@@ -103,22 +95,17 @@ export default function App({ sandbox }) {
   };
 
   const getReadContract = async () => {
-    if (!sandbox) await ensureNetwork();
-    const runner = sandbox?.runner ?? new ethers.BrowserProvider(
-      chainBoundWallet(window.ethereum, NETWORK.chainId), NETWORK.chainId
-    );
-    const contract = new ethers.Contract(CONTRACT_ADDRESS, CONTRACT_ABI, runner);
-    await verifyDeployment(contract, {address:CONTRACT_ADDRESS, chainId:NETWORK.chainId, version:PROTOCOL_VERSION, codeHash:EXPECTED_CODE_HASH, fastLocal:NETWORK.fastLocal});
-    return contract;
+    if (!verifiedContractRef.current) throw new Error("Wallet is not connected");
+    return verifiedContractRef.current;
   };
 
   const getSignerContract = async () => {
-    const verifiedContract = await getReadContract();
-    if (sandbox) return verifiedContract;
-    const p = verifiedContract.runner;
-    const signer = await p.getSigner();
+    const account = accountRef.current;
+    const contract = await getReadContract();
+    if (sandbox) return contract;
+    const signer = await contract.runner.getSigner();
     await assertWalletChain(window.ethereum, NETWORK.chainId);
-    if ((await signer.getAddress()).toLowerCase() !== accountRef.current.toLowerCase()) {
+    if (!account || accountRef.current !== account || (await signer.getAddress()).toLowerCase() !== account.toLowerCase()) {
       throw Object.assign(new Error("Wallet changed"), {code:"WALLET_CHANGED"});
     }
     return new ethers.Contract(CONTRACT_ADDRESS, CONTRACT_ABI, signer);
@@ -129,10 +116,10 @@ export default function App({ sandbox }) {
     if (transactionInFlight.current) return null;
     transactionInFlight.current = true;
     setLoading(true);
-    setStatus(sandbox ? "⏳ Executing in the browser EVM…" : "⏳ Approve the transaction in MetaMask…");
+    setStatus(sandbox ? "⏳ Executing in the browser EVM…" : "⏳ Preparing the MetaMask request…");
     try {
       const tx      = await fn();
-      setStatus("⏳ Transaction sent — waiting for confirmation…");
+      setStatus(`⏳ Transaction sent — waiting for ${NETWORK.name} confirmation…`);
       const receipt = await confirmedReceipt(tx);
       eventReader.invalidate();
       setStatus(`✅ ${successMsg}`);
@@ -148,12 +135,16 @@ export default function App({ sandbox }) {
   };
 
   // ── Data loaders (event-based — free, no gas, no MetaMask popup) ──────────
-  const fetchElections = useCallback(async () => {
+  const fetchElections = useCallback(async (showProgress = false, chooseView = false) => {
     const request = ++electionRequest.current;
     const viewer = accountRef.current;
+    if (showProgress) setHistoryState("loading");
     try {
       const rc        = await getReadContract();
-      const events = await eventReader.read(rc);
+      const [events, owner] = await Promise.all([
+        eventReader.read(rc),
+        V2 ? rc.superAdmin() : fixedOwnerRef.current,
+      ]);
       const [created, started, revealed, ended, voteEvents, revealEvents] =
         ["ElectionCreated", "ElectionStarted", "RevealStarted", "ElectionEnded", "VoteCast", "VoteRevealed"]
           .map(name => events.filter(e => e.name === name));
@@ -178,19 +169,22 @@ export default function App({ sandbox }) {
         return { id, name:e.args.name, state, commitReveal: e.args.commitReveal, totalVotes: voteCounts[id]??0 };
       });
 
-      if (V2 && viewer) {
-        list = await enrichElections(rc, list, viewer);
-        const superUser = (await rc.superAdmin()).toLowerCase() === viewer.toLowerCase();
-        if (accountRef.current !== viewer || request !== electionRequest.current) return [];
-        setIsSuperAdmin(superUser); setIsAdmin(superUser || list.some(e => e.canManage));
+      if (V2 && viewer) list = await enrichElections(rc, list, viewer);
+      if (accountRef.current !== viewer || request !== electionRequest.current) return [];
+      if (owner && viewer) {
+        const superUser = owner.toLowerCase() === viewer.toLowerCase();
+        const canManage = list.some(e => e.canManage);
+        setIsSuperAdmin(superUser); setIsAdmin(superUser || canManage);
+        if (chooseView && (superUser || canManage) && !selectionRef.current) setView("admin");
       }
 
-      if (accountRef.current !== viewer || request !== electionRequest.current) return [];
       setElections(list);
+      setHistoryState("ready");
       return list;
     } catch(err) {
       if (accountRef.current !== viewer || request !== electionRequest.current) return [];
       setStatus("❌ Could not load elections: " + safeErrorDetail(err));
+      setHistoryState("error");
       setDataReady(false);
       return [];
     }
@@ -269,53 +263,107 @@ export default function App({ sandbox }) {
   const connectWallet = async () => {
     if (!sandbox && !window.ethereum) { alert("Please install MetaMask"); return; }
     setConnecting(true);
-    setStatus("⏳ Connecting…");
+    const session = walletSession.current;
+    setStatus(sandbox ? "⏳ Connecting to the browser EVM…" : "⏳ Approve the connection in MetaMask if prompted…");
     try {
       const accounts = sandbox ? [sandbox.account] : await window.ethereum.request({ method:"eth_requestAccounts" });
+      setStatus(`⏳ Checking the voting contract on ${NETWORK.name}…`);
       if (!sandbox) await ensureNetwork();
       const userAddr  = accounts[0];
-      accountRef.current = userAddr;
-      const rc        = await getReadContract();
+      if (!userAddr) throw new Error("No wallet account was returned");
+      const provider = sandbox?.runner ?? new ethers.BrowserProvider(
+        chainBoundWallet(window.ethereum, NETWORK.chainId, () => setStatus("⏳ Approve the transaction in MetaMask…")),
+        NETWORK.chainId
+      );
+      const rc = new ethers.Contract(CONTRACT_ADDRESS, CONTRACT_ABI, provider);
+      await verifyDeployment(rc, {address:CONTRACT_ADDRESS, chainId:NETWORK.chainId, version:PROTOCOL_VERSION, codeHash:EXPECTED_CODE_HASH, fastLocal:NETWORK.fastLocal});
       const adminAddr = await rc.superAdmin();
+      if (session !== walletSession.current) return;
       const admin     = adminAddr.toLowerCase()===userAddr.toLowerCase();
+      fixedOwnerRef.current = V2 ? "" : adminAddr;
+      verifiedContractRef.current = rc;
+      accountRef.current = userAddr;
       setAccount(userAddr); setIsAdmin(admin);
       setIsSuperAdmin(admin);
       setStatus(`✅ Connected to ${NETWORK.name}`);
-      const list = await fetchElections();
-      setView(admin || (V2 && list.some(e => e.canManage)) ? "admin" : "voter");
+      setView(admin ? "admin" : "voter");
+      void fetchElections(true, !admin);
     } catch(err) {
-      setStatus("❌ " + safeErrorDetail(err));
+      if (session === walletSession.current) setStatus("❌ " + safeErrorDetail(err));
     } finally {
       setConnecting(false);
     }
   };
 
-  const disconnectWallet = () => {
-    if (transactionInFlight.current) return;
+  const clearAccountState = useCallback(() => {
+    walletSession.current++;
     electionRequest.current++;
-    accountRef.current = ""; setIsSuperAdmin(false);
+    accountRef.current = "";
     selectionVersion.current++; selectionRef.current = null; resultRequest.current++;
-    setDataReady(false); eventReader.invalidate();
-    setAccount(""); setIsAdmin(false); setView("connect");
+    setDataReady(false); setHasVoted(false); setHasCommitted(false);
+    setAccount(""); setIsAdmin(false); setIsSuperAdmin(false);
     setElections([]); setSelElection(null); setCandidates([]);
-    setVoters([]); setResults([]); setStatus("");
-  };
+    setHistoryState("loading");
+    setVoters([]); setResults([]); setResultError(""); setStatus("");
+    setSelCandId(""); setVoteSecret(""); setTxLogs([]); setConfirmEnd(false);
+    setElName(""); setCandName(""); setVoterAddr(""); setRoleAddress("");
+    setCrMode(false); setSchedule({ start:"", votingEnd:"", end:"" });
+  }, []);
+
+  const disconnectWallet = useCallback(() => {
+    if (transactionInFlight.current) return;
+    verifiedContractRef.current = null;
+    fixedOwnerRef.current = "";
+    clearAccountState();
+    setView("connect");
+  }, [clearAccountState]);
 
   // ── Select election ────────────────────────────────────────────────────────
-  const selectElection = async (el) => {
-    if (loading || !el) return;
+  const selectElection = useCallback(async (el) => {
+    const viewer = accountRef.current;
+    if (transactionInFlight.current || !viewer || !el) return;
     const version = ++selectionVersion.current;
     selectionRef.current = el.id; resultRequest.current++;
     setDataReady(false); setHasVoted(false); setHasCommitted(false);
     setCandidates([]); setVoters([]); setResultError("");
     setSelElection(el); setResults([]); setSelCandId(""); setVoteSecret("");
-    const cands = await fetchCandidates(el.id);
-    if (version !== selectionVersion.current || cands === null) return;
-    if (!await fetchVoters(el.id)) return;
-    if (version !== selectionVersion.current) return;
+    const [cands, votersLoaded] = await Promise.all([fetchCandidates(el.id), fetchVoters(el.id)]);
+    if (version !== selectionVersion.current || cands === null || !votersLoaded) return;
     if (el.state==="ended") await doLoadResults(el.id, cands);
-    if (account)            await checkVoteStatus(el.id, account);
-  };
+    if (version === selectionVersion.current) await checkVoteStatus(el.id, viewer);
+  }, [fetchCandidates, fetchVoters, doLoadResults, checkVoteStatus]);
+
+  useEffect(() => {
+    if (sandbox) return;
+    const wallet = window.ethereum;
+    if (!wallet) return;
+    const reload = () => window.location.reload();
+    const switchAccount = async ([nextAccount]) => {
+      const previous = accountRef.current;
+      if (!previous || nextAccount?.toLowerCase() === previous.toLowerCase()) return;
+      // Keep the existing reload behavior if a write is already in flight.
+      if (transactionInFlight.current) { reload(); return; }
+      if (!nextAccount) { disconnectWallet(); return; }
+
+      const selectedId = selectionRef.current;
+      clearAccountState();
+      const session = walletSession.current;
+      const selection = selectionVersion.current;
+      accountRef.current = nextAccount;
+      setAccount(nextAccount);
+      setView("voter");
+      const fresh = await fetchElections(true, true);
+      if (session !== walletSession.current || selection !== selectionVersion.current) return;
+      const selected = fresh.find(e => e.id === selectedId);
+      if (selected) await selectElection(selected);
+    };
+    wallet.on("chainChanged", reload);
+    wallet.on("accountsChanged", switchAccount);
+    return () => {
+      wallet.removeListener("chainChanged", reload);
+      wallet.removeListener("accountsChanged", switchAccount);
+    };
+  }, [sandbox, clearAccountState, disconnectWallet, fetchElections, selectElection]);
 
   const handleSwitchView = async (v) => {
     if (loading || (v === "admin" && !isAdmin)) return;
@@ -511,7 +559,7 @@ export default function App({ sandbox }) {
   };
 
   useEffect(() => {
-    if (!V2 || !account || loading) return;
+    if (!V2 || !account || loading || historyState === "loading") return;
     let stopped = false;
     let refreshing = false;
     const timer = setInterval(async () => {
@@ -526,7 +574,7 @@ export default function App({ sandbox }) {
       } finally { refreshing = false; }
     }, NETWORK.local ? 2000 : 15000);
     return () => { stopped = true; clearInterval(timer); };
-  }, [account, loading, selElection?.id, selElection?.state, fetchElections]);
+  }, [account, loading, historyState, selElection?.id, selElection?.state, fetchElections]);
 
   // ── Statistics card ────────────────────────────────────────────────────────
   const StatsCard = () => {
@@ -598,10 +646,11 @@ export default function App({ sandbox }) {
     <ElectionSidebar
       contractAddress={CONTRACT_ADDRESS}
       elections={V2 && view==="admin" ? elections.filter(e=>e.canManage) : elections} selElection={selElection}
+      historyState={historyState}
       onSelect={selectElection} onRefresh={async () => {
-        if (loading) return;
+        if (loading || historyState === "loading") return;
         eventReader.invalidate();
-        const fresh = await fetchElections();
+        const fresh = await fetchElections(true);
         const selected = fresh.find(e => e.id === selectionRef.current);
         if (selected) await selectElection(selected);
       }}
@@ -893,7 +942,7 @@ export default function App({ sandbox }) {
                   <div style={{ fontSize:12, color:"#f0a0a0", marginTop:8, lineHeight:1.6 }}>
                     {!dataReady ? "Authorization has not been verified. Refresh the election list to retry." : "This wallet is not on the authorized list for this election, so it cannot vote."}
                     {sandbox ? " Enroll the demo voter using the admin account, then switch accounts in the sandbox bar." :
-                      " Open MetaMask and switch to your registered voter account to reload the page."}
+                      " Open MetaMask and switch to your registered voter account. VoteChain will check that wallet's eligibility."}
                     {isAdmin && <span style={{ display:"block", color:C.muted, marginTop:4 }}>
                       (The admin wallet must also be authorized explicitly before it can vote.)
                     </span>}

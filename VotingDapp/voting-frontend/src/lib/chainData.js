@@ -51,7 +51,46 @@ export async function findDeploymentBlock(provider, address, latest) {
   return low;
 }
 
-export function createEventReader({ address, deploymentBlock, ttlMs = 12_000 }) {
+const MAX_CHECKPOINT_CHARS = 512_000;
+
+function decodeLogs(logs, contract) {
+  return logs.map(log => {
+    const parsed = contract.interface.parseLog(log);
+    if (!parsed) throw new Error("Event does not match the configured contract ABI");
+    return { ...log, name: parsed.name, args: parsed.args };
+  });
+}
+
+function readCheckpoint(storage, key, start, address, contract) {
+  try {
+    const raw = storage?.getItem(key);
+    if (!raw || raw.length > MAX_CHECKPOINT_CHARS) return;
+    const { anchor, anchorHash, logs } = JSON.parse(raw);
+    if (!Number.isSafeInteger(anchor) || anchor < start || !/^0x[0-9a-f]{64}$/i.test(anchorHash) ||
+        !Array.isArray(logs) || logs.some(log => !log ||
+          log.address?.toLowerCase() !== address.toLowerCase() ||
+          !Number.isSafeInteger(log.blockNumber) || log.blockNumber < start || log.blockNumber > anchor ||
+          !Number.isSafeInteger(log.index) || log.index < 0)) return;
+    return { anchor, anchorHash, events: decodeLogs(logs, contract) };
+  } catch {
+    // Storage can be unavailable, stale, or contain invalid data.
+  }
+}
+
+function saveCheckpoint(storage, key, { anchor, anchorHash, events }) {
+  try {
+    const logs = events.filter(event => event.blockNumber <= anchor).map(
+      ({ address, blockNumber, index, topics, data }) => ({ address, blockNumber, index, topics, data })
+    );
+    const raw = JSON.stringify({ anchor, anchorHash, logs });
+    if (raw.length <= MAX_CHECKPOINT_CHARS) storage.setItem(key, raw);
+    else storage.removeItem(key);
+  } catch {
+    // A quota or browser policy should never prevent reading the live chain.
+  }
+}
+
+export function createEventReader({ address, deploymentBlock, ttlMs = 12_000, getStorage }) {
   if (deploymentBlock !== undefined && (!Number.isSafeInteger(deploymentBlock) || deploymentBlock < 0)) {
     throw new Error("VITE_DEPLOYMENT_BLOCK must be a non-negative integer");
   }
@@ -68,8 +107,8 @@ export function createEventReader({ address, deploymentBlock, ttlMs = 12_000 }) 
       const promise = (async () => {
         const latest = await provider.getBlockNumber();
         const snapshot = await provider.getBlock(latest);
-        const previous = cache?.chain === chain ? cache : undefined;
-        const start = previous?.start ?? deploymentBlock ?? await findDeploymentBlock(provider, address, latest);
+        const memory = cache?.chain === chain ? cache : undefined;
+        const start = memory?.start ?? deploymentBlock ?? await findDeploymentBlock(provider, address, latest);
         if (start > latest) throw new Error("Deployment block is newer than the chain tip");
         // An explicit deployment block avoids historical getCode requests on
         // non-archive providers. Verify completeness against electionCount below.
@@ -78,28 +117,44 @@ export function createEventReader({ address, deploymentBlock, ttlMs = 12_000 }) 
         }
         // Recheck the retained prefix against the current chain. Re-scan the last
         // 12 blocks on every refresh; a deeper reorg invalidates the whole prefix.
+        let storage;
+        // Persist only a known deployment's public events. Local chains and
+        // deployments whose start must be discovered use the in-memory cache.
+        if (deploymentBlock !== undefined) {
+          try { storage = getStorage?.(); } catch { /* storage unavailable */ }
+        }
+        const key = `votechain:events:1:${chain}:${address.toLowerCase()}:${start}`;
+        const stored = !memory && readCheckpoint(storage, key, start, address, contract);
+        const previous = memory || stored;
         const canReuse = previous && latest >= previous.anchor &&
           (await provider.getBlock(previous.anchor))?.hash === previous.anchorHash;
         const scanStart = canReuse ? Math.max(start, previous.anchor + 1) : start;
-        const logs = await queryLogsPaged(provider, address, scanStart, latest);
-        const after = await provider.getBlock(latest);
-        if (!snapshot?.hash || after?.hash !== snapshot.hash) throw new Error("Chain changed during event scan; refresh to retry.");
-        const freshEvents = logs.map(log => {
-          const parsed = contract.interface.parseLog(log);
-          if (!parsed) throw new Error("Event does not match the configured contract ABI");
-          return { ...log, name: parsed.name, args: parsed.args };
-        });
-        const events = [...(canReuse ? previous.events.filter(e => e.blockNumber <= previous.anchor) : []), ...freshEvents];
+        const readFrom = async from => {
+          const logs = await queryLogsPaged(provider, address, from, latest);
+          if (!snapshot?.hash || (await provider.getBlock(latest))?.hash !== snapshot.hash) {
+            throw new Error("Chain changed during event scan; refresh to retry.");
+          }
+          return decodeLogs(logs, contract);
+        };
+        let events = [...(canReuse ? previous.events.filter(e => e.blockNumber <= previous.anchor) : []), ...await readFrom(scanStart)];
+        const electionCount = BigInt(await contract.electionCount({ blockTag: latest }));
+        const complete = () => BigInt(events.filter(e => e.name === "ElectionCreated").length) === electionCount;
+        const rebuildCheckpoint = stored && canReuse && !complete();
+        if (rebuildCheckpoint) events = await readFrom(start);
         if (events.length > 250_000) throw new Error("Event history exceeds the browser limit. Use an indexed service.");
-        const electionCount = await contract.electionCount({ blockTag: latest });
-        if (BigInt(events.filter(e => e.name === "ElectionCreated").length) !== BigInt(electionCount)) {
+        if (!complete()) {
           throw new Error("Incomplete election history. Check the deployment block and RPC provider.");
         }
         const anchor = Math.max(0, latest - 12);
         const anchorHash = (await provider.getBlock(anchor))?.hash;
         if (!anchorHash) throw new Error("Could not verify event checkpoint");
         if ((await provider.getBlock(latest))?.hash !== snapshot.hash) throw new Error("Chain changed before event checkpoint; refresh to retry.");
-        if (generation === currentGeneration) cache = { chain, events, start, anchor, anchorHash, time: Date.now() };
+        if (generation === currentGeneration) {
+          cache = { chain, events, start, anchor, anchorHash, time: Date.now() };
+          if (storage && anchor >= start && (rebuildCheckpoint || !canReuse || previous.anchor !== anchor)) {
+            saveCheckpoint(storage, key, cache);
+          }
+        }
         return events;
       })();
       inflight = { chain, promise };

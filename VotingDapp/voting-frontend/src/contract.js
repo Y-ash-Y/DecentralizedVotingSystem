@@ -9,7 +9,11 @@ export const NETWORK = BROWSER_SANDBOX
   : networkConfig(env);
 export const PROTOCOL_VERSION = BROWSER_SANDBOX ? 2 : Number(env.VITE_PROTOCOL_VERSION || 1);
 if (![1, 2].includes(PROTOCOL_VERSION)) throw new Error("Unsupported VITE_PROTOCOL_VERSION");
-export const CONTRACT_ADDRESS = env.VITE_CONTRACT_ADDRESS || "0xBD29A19DBD25bD4d97C09b65862CB7061A9b3011";
+const DEFAULT_SEPOLIA_ADDRESS = "0xBD29A19DBD25bD4d97C09b65862CB7061A9b3011";
+export const CONTRACT_ADDRESS = env.VITE_CONTRACT_ADDRESS || DEFAULT_SEPOLIA_ADDRESS;
+export const DEPLOYMENT_BLOCK = env.VITE_DEPLOYMENT_BLOCK ? Number(env.VITE_DEPLOYMENT_BLOCK) :
+  NETWORK.chainId === 11155111 && CONTRACT_ADDRESS.toLowerCase() === DEFAULT_SEPOLIA_ADDRESS.toLowerCase()
+    ? 11077798 : undefined;
 export const EXPECTED_CODE_HASH = env.VITE_EXPECTED_CODE_HASH || "";
 if (!BROWSER_SANDBOX && PROTOCOL_VERSION === 2 && (!env.VITE_CONTRACT_ADDRESS || !EXPECTED_CODE_HASH || !env.VITE_DEPLOYMENT_BLOCK)) {
   throw new Error("V2 requires an address, deployment block and bytecode hash from its deployment manifest");

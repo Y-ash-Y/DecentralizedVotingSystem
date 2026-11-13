@@ -98,6 +98,36 @@ test("a deep reorg discards the prefix and rescans from deployment", async () =>
   assert.deepEqual(await reader.read(contract), []);
   assert.equal(queriedFrom, 5);
 });
+test("a fresh reader checks the saved anchor and scans only the newer blocks", async () => {
+  const { contract } = fakeContract();
+  const store = new Map();
+  const storage = { getItem: key => store.get(key), setItem: (key, value) => store.set(key, value) };
+  const address = "0x0000000000000000000000000000000000000001";
+  const options = { address, deploymentBlock: 5, getStorage: () => storage };
+  const log = { address, blockNumber: 5, index: 0, data: "0x", topics: [] };
+  const ranges = [];
+  let hash = "0x" + "1".repeat(64);
+  contract.runner.getBlock = async () => ({ hash });
+  contract.runner.getLogs = async ({ fromBlock, toBlock }) => {
+    ranges.push(fromBlock);
+    return fromBlock <= 5 && toBlock >= 5 ? [log] : [];
+  };
+  const first = await createEventReader(options).read(contract);
+  assert.equal(store.size, 1);
+  assert.deepEqual(await createEventReader(options).read(contract), first);
+  assert.deepEqual(ranges, [5, 9]);
+
+  hash = "0x" + "2".repeat(64);
+  assert.deepEqual(await createEventReader(options).read(contract), first);
+  assert.equal(ranges.at(-1), 5);
+
+  const key = [...store.keys()][0];
+  store.set(key, JSON.stringify({ ...JSON.parse(store.get(key)), logs: [] }));
+  assert.deepEqual(await createEventReader(options).read(contract), first);
+  assert.deepEqual(ranges.slice(-2), [9, 5]);
+  assert.deepEqual(await createEventReader(options).read(contract), first);
+  assert.equal(ranges.at(-1), 9);
+});
 test("explicit block supports providers without historical code reads", async () => {
   const { contract } = fakeContract();
   contract.runner.getCode = async (_, block) => {

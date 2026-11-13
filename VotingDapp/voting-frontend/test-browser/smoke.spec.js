@@ -16,10 +16,10 @@ async function simulatedWallet(page) {
       if(method==="eth_chainId")return "0xaa36a7";
       if(method==="eth_requestAccounts"||method==="eth_accounts")return [owner];
       if(method==="eth_getCode")return "0x1234";
-      if(method==="eth_blockNumber")return "0x1";
+      if(method==="eth_blockNumber")return "0xa908b2";
       if(method==="eth_getLogs")return [];
       if(method==="eth_call")return responses[params[0].data.slice(0,10)]||"0x";
-      if(method==="eth_getBlockByNumber")return {number:params[0]==="0x0"?"0x0":"0x1",hash:zero,parentHash:zero,
+      if(method==="eth_getBlockByNumber")return {number:params[0]==="latest"?"0xa908b2":params[0],hash:zero,parentHash:zero,
         timestamp:"0x70000000",nonce:"0x0000000000000000",difficulty:"0x0",gasLimit:"0x1c9c380",
         gasUsed:"0x0",miner:owner,extraData:"0x",transactions:[],baseFeePerGas:"0x1"};
       throw new Error(`Read-only simulator: unexpected ${method}`);
@@ -47,6 +47,7 @@ for(const width of [375,768,1440]) {
     await page.getByRole("button",{name:"Connect MetaMask"}).click();
     await expect(page.getByRole("button",{name:"Disconnect"})).toBeVisible();
     await expect(page.getByRole("button",{name:"Admin",exact:true})).toBeVisible();
+    await expect(page.getByText("No elections yet.",{exact:true})).toBeVisible();
     await checkPage(page,"admin",testInfo);
     expect(errors).toEqual([]);
   });
