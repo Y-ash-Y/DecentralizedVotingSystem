@@ -2,14 +2,14 @@
 
 ## Current status
 
-V2 is implemented and tested locally, **not deployed to Sepolia** by this work.
-The default frontend remains on V1. Do not copy an ephemeral Hardhat address into
-a Sepolia configuration. A new V2 address cannot display or migrate V1 elections.
+The scheduled contract has been tested locally. A hosted Sepolia demo needs its
+own verified deployment manifest. The default Sepolia address uses manual phase
+transitions and has a different ABI. Election state belongs to the contract
+address that created it.
 
-New builds use Hardhat 3.18.0 and ethers 6.17.0. Runtime metadata hashes differ
-from old builds despite identical executable contract code. Always use the actual
-deployment manifest; never replace an existing deployment's expected hash with a
-new local artifact hash. See [verification](VERIFICATION.md).
+Always use the actual deployment manifest. A new compiler build can produce a
+different runtime metadata hash even if executable contract code is identical.
+See [verification](VERIFICATION.md).
 
 ## No-funds rehearsal
 
@@ -25,7 +25,7 @@ The in-process chain disappears when the command exits. The script prints a
 manifest but intentionally does not save a durable manifest for that chain.
 `localhost` deployment is also supported for contract development; the current
 default browser configuration remains Sepolia. For isolated real-MetaMask tests,
-use the explicit local V2 mode in [manual testing](MANUAL-WALLET-TESTS.md).
+use the [local wallet walkthrough](MANUAL-WALLET-TESTS.md).
 
 ## A separately authorized testnet deployment
 
@@ -61,8 +61,8 @@ use the explicit local V2 mode in [manual testing](MANUAL-WALLET-TESTS.md).
    VITE_EXPECTED_CODE_HASH=<manifest runtimeCodeHash>
    ```
 
-8. Restart/rebuild the frontend. V2 refuses incomplete configuration, wrong
-   network, missing code, runtime-hash mismatch or wrong protocol version.
+8. Restart/rebuild the frontend. The app rejects incomplete scheduled-contract
+   configuration, wrong network, missing code, runtime-hash mismatch or wrong ABI.
    VITE variables are compiled into public browser code: **never put wallet keys
    or a private RPC API key there**.
 9. Run non-binding demo elections with separate owner/delegate/voter wallets.
@@ -102,12 +102,10 @@ during the reveal window. An unmined/pending transaction has not cast a vote.
 | Lost local storage | The reveal form accepts the exact candidate and secret from the private JSON backup. There is no automatic import yet. Check its chain, contract, election and wallet first. |
 | Lost secret and no backup | It cannot be reconstructed from the hash. The committed vote cannot be revealed. |
 | Compromised owner key | Use reviewed owner-transfer procedures if still possible, revoke explicit old roles, warn users and halt reliance on the demo. Transfer needs successor acceptance; there is no configured multisig/recovery service. |
-| RPC outage at deadline | Document the failure. V2 has no extension/override; a pending vote may be excluded. |
+| RPC outage at deadline | Document the failure. Scheduled phases have no extension or override, so a pending vote may be excluded. |
 
-Frontend rollback means restoring a reviewed frontend/configuration that matches
-the same protocol. It cannot roll back chain state. Keep the prior V1 URL and
-configuration available until all outstanding V1 reveals are finished. Do not
-delete browser backups, rewrite local storage keys or point V1 commitments at V2.
-
-No branch push, source verification, public hosting or testnet deployment is
-implicit in this runbook.
+Restore a frontend build configured for the same deployment if the frontend
+needs to be rolled back. Chain state remains at that deployment. Keep each
+deployment's URL, configuration and ballot backups available until outstanding
+reveals finish. Commitments and backups must be used with the contract that
+accepted them.

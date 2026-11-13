@@ -5,21 +5,30 @@ import { commitmentKey, loadCommitment, prepareCommitment } from "./lib/commitme
 import { verifyDeployment, enrichElections } from "./lib/deployment.js";
 import { summarizeResults } from "./lib/results.js";
 import { confirmedReceipt, transactionError } from "./lib/transactions.js";
+import { assertWalletChain, chainBoundWallet } from "./lib/walletChain.js";
 import { safeErrorDetail } from "./lib/errors.js";
 import {
-  CONTRACT_ADDRESS, CONTRACT_ABI,
-  PROTOCOL_VERSION, EXPECTED_CODE_HASH,
+  BROWSER_SANDBOX, CONTRACT_ADDRESS as defaultAddress, CONTRACT_ABI,
+  PROTOCOL_VERSION, EXPECTED_CODE_HASH as defaultCodeHash,
   NETWORK,
 } from "./contract.js";
 
 import { C, short, Btn, RawInput, Card, SectionTitle, Badge, Toast, ConfirmModal, CopyBtn, BarChart, Outcome, TxLog, Topbar, ElectionSidebar } from "./components/presentation.jsx";
 const V2 = PROTOCOL_VERSION === 2;
-const eventReader = createEventReader({address:CONTRACT_ADDRESS, deploymentBlock:import.meta.env.VITE_DEPLOYMENT_BLOCK ? Number(import.meta.env.VITE_DEPLOYMENT_BLOCK) : undefined});
 
 // ─────────────────────────────────────────────────────────────────────────────
 // ROOT APP
 // ─────────────────────────────────────────────────────────────────────────────
-export default function App() {
+export default function App({ sandbox }) {
+  if (BROWSER_SANDBOX !== Boolean(sandbox)) throw new Error("Missing or invalid browser sandbox configuration");
+  const CONTRACT_ADDRESS = sandbox?.address ?? defaultAddress;
+  const EXPECTED_CODE_HASH = sandbox?.codeHash ?? defaultCodeHash;
+  const [eventReader] = useState(() => createEventReader({
+    address: CONTRACT_ADDRESS,
+    deploymentBlock: sandbox?.deploymentBlock ??
+      (import.meta.env.VITE_DEPLOYMENT_BLOCK ? Number(import.meta.env.VITE_DEPLOYMENT_BLOCK) : undefined),
+  }));
+  const ballotStorage = () => sandbox?.storage ?? window.localStorage;
   // ── Auth ──
   const [account,    setAccount]    = useState("");
   const [isAdmin,    setIsAdmin]    = useState(false);
@@ -64,7 +73,7 @@ export default function App() {
 
   // ── MetaMask listeners ─────────────────────────────────────────────────────
   useEffect(() => {
-    if (!window.ethereum) return;
+    if (sandbox || !window.ethereum) return;
     const reload = () => window.location.reload();
     window.ethereum.on("chainChanged",    reload);
     window.ethereum.on("accountsChanged", reload);
@@ -94,16 +103,21 @@ export default function App() {
   };
 
   const getReadContract = async () => {
-    await ensureNetwork();
-    const contract = new ethers.Contract(CONTRACT_ADDRESS, CONTRACT_ABI, new ethers.BrowserProvider(window.ethereum));
+    if (!sandbox) await ensureNetwork();
+    const runner = sandbox?.runner ?? new ethers.BrowserProvider(
+      chainBoundWallet(window.ethereum, NETWORK.chainId), NETWORK.chainId
+    );
+    const contract = new ethers.Contract(CONTRACT_ADDRESS, CONTRACT_ABI, runner);
     await verifyDeployment(contract, {address:CONTRACT_ADDRESS, chainId:NETWORK.chainId, version:PROTOCOL_VERSION, codeHash:EXPECTED_CODE_HASH, fastLocal:NETWORK.fastLocal});
     return contract;
   };
 
   const getSignerContract = async () => {
-    await getReadContract();
-    const p = new ethers.BrowserProvider(window.ethereum);
+    const verifiedContract = await getReadContract();
+    if (sandbox) return verifiedContract;
+    const p = verifiedContract.runner;
     const signer = await p.getSigner();
+    await assertWalletChain(window.ethereum, NETWORK.chainId);
     if ((await signer.getAddress()).toLowerCase() !== accountRef.current.toLowerCase()) {
       throw Object.assign(new Error("Wallet changed"), {code:"WALLET_CHANGED"});
     }
@@ -115,7 +129,7 @@ export default function App() {
     if (transactionInFlight.current) return null;
     transactionInFlight.current = true;
     setLoading(true);
-    setStatus("⏳ Approve the transaction in MetaMask…");
+    setStatus(sandbox ? "⏳ Executing in the browser EVM…" : "⏳ Approve the transaction in MetaMask…");
     try {
       const tx      = await fn();
       setStatus("⏳ Transaction sent — waiting for confirmation…");
@@ -253,12 +267,12 @@ export default function App() {
 
   // ── Connect ────────────────────────────────────────────────────────────────
   const connectWallet = async () => {
-    if (!window.ethereum) { alert("Please install MetaMask"); return; }
+    if (!sandbox && !window.ethereum) { alert("Please install MetaMask"); return; }
     setConnecting(true);
     setStatus("⏳ Connecting…");
     try {
-      const accounts  = await window.ethereum.request({ method:"eth_requestAccounts" });
-      await ensureNetwork();
+      const accounts = sandbox ? [sandbox.account] : await window.ethereum.request({ method:"eth_requestAccounts" });
+      if (!sandbox) await ensureNetwork();
       const userAddr  = accounts[0];
       accountRef.current = userAddr;
       const rc        = await getReadContract();
@@ -430,7 +444,7 @@ export default function App() {
     if (hasCommitted) { setStatus("❌ Already committed in this election"); return; }
     try {
       const domain = V2 ? { chainId:NETWORK.chainId, contract:CONTRACT_ADDRESS, electionId:selElection.id } : undefined;
-      const ballot = prepareCommitment(window.localStorage, crKey(selElection.id, account), selCandId, account, domain);
+      const ballot = prepareCommitment(ballotStorage(), crKey(selElection.id, account), selCandId, account, domain);
       setVoteSecret(ballot.secret);
       const r = await sendTx(
         async () => (await getSignerContract()).commitVote(BigInt(selElection.id), ballot.hash),
@@ -463,7 +477,7 @@ export default function App() {
   // Pre-fill the reveal form from a locally-saved commitment, if present.
   const loadSavedCommitment = () => {
     try {
-      const saved = loadCommitment(window.localStorage, crKey(selElection.id, account));
+      const saved = loadCommitment(ballotStorage(), crKey(selElection.id, account));
       if (saved) {
         const { candidateId, secret } = saved;
         setSelCandId(candidateId); setVoteSecret(secret);
@@ -476,7 +490,7 @@ export default function App() {
 
   const downloadBackup = () => {
     try {
-      const ballot = loadCommitment(window.localStorage, crKey(selElection.id, account));
+      const ballot = loadCommitment(ballotStorage(), crKey(selElection.id, account));
       if (!ballot) throw new Error("No saved ballot; submit a commitment first.");
       const blob = new Blob([JSON.stringify({ contract: CONTRACT_ADDRESS, chainId: NETWORK.chainId, electionId: selElection.id, voter: account, ...ballot }, null, 2)], { type: "application/json" });
       const url = URL.createObjectURL(blob);
@@ -555,11 +569,11 @@ export default function App() {
         <h1 style={{ fontSize:28, fontWeight:700, color:C.text, marginBottom:8, fontFamily:C.sans }}>VoteChain</h1>
         <p style={{ color:C.muted, fontSize:14, lineHeight:1.7, marginBottom:28 }}>
           Auditable voting prototype on {NETWORK.name} — not for binding elections.<br/>
-          {NETWORK.local && <strong>LOCAL TEST ONLY — no real funds or Sepolia transactions.<br/></strong>}
+          {NETWORK.local && <strong>{sandbox ? "ISOLATED BROWSER EVM" : "LOCAL TEST ONLY"} — no real funds or Sepolia transactions.<br/></strong>}
           <span style={{ fontFamily:C.mono, fontSize:12 }}>{CONTRACT_ADDRESS.slice(0,14)}…</span>
         </p>
         <Btn size="lg" onClick={connectWallet} disabled={connecting} full>
-          {connecting ? "Connecting…" : "Connect MetaMask"}
+          {connecting ? "Connecting…" : sandbox ? `Enter as Demo ${sandbox.role}` : "Connect MetaMask"}
         </Btn>
         <Toast msg={status} onDismiss={()=>setStatus("")}/>
         <p style={{ color:C.muted, fontSize:12, marginTop:18, lineHeight:1.7 }}>
@@ -582,6 +596,7 @@ export default function App() {
 
   const sidebar = (
     <ElectionSidebar
+      contractAddress={CONTRACT_ADDRESS}
       elections={V2 && view==="admin" ? elections.filter(e=>e.canManage) : elections} selElection={selElection}
       onSelect={selectElection} onRefresh={async () => {
         if (loading) return;
@@ -704,7 +719,7 @@ export default function App() {
                         Add Candidate{candName.split(/[\n,]+/).filter(s=>s.trim()).length>1?"s":""}
                       </Btn>
                       <div style={{ fontSize:11, color:C.muted, marginTop:6 }}>
-                        Add all candidates at once — a single MetaMask signature for the whole list.
+                        Add all candidates at once in a single transaction.
                       </div>
                     </div>
                   )}
@@ -758,7 +773,7 @@ export default function App() {
                         Authorize Voter{voterAddr.trim().split(/[\s,]+/).filter(Boolean).length>1?"s":""}
                       </Btn>
                       <div style={{ fontSize:11, color:C.muted, marginTop:6 }}>
-                        Paste a whole list — all authorized in a single MetaMask signature.
+                        Paste a whole list to authorize all voters in a single transaction.
                       </div>
                     </div>
                   )}
@@ -877,7 +892,8 @@ export default function App() {
                 ) : (
                   <div style={{ fontSize:12, color:"#f0a0a0", marginTop:8, lineHeight:1.6 }}>
                     {!dataReady ? "Authorization has not been verified. Refresh the election list to retry." : "This wallet is not on the authorized list for this election, so it cannot vote."}
-                    Open MetaMask → switch to your registered voter account → the page reloads automatically.
+                    {sandbox ? " Enroll the demo voter using the admin account, then switch accounts in the sandbox bar." :
+                      " Open MetaMask and switch to your registered voter account to reload the page."}
                     {isAdmin && <span style={{ display:"block", color:C.muted, marginTop:4 }}>
                       (The admin wallet must also be authorized explicitly before it can vote.)
                     </span>}
@@ -948,7 +964,8 @@ export default function App() {
                       <div style={{ marginBottom:14, padding:12, background:C.surface2, borderRadius:8, fontSize:13 }}>
                         Voting for: <strong style={{ color:C.gold }}>{candidates.find(c=>c.id===selCandId)?.name}</strong>
                         <div style={{ color:C.muted, fontSize:11, marginTop:4 }}>
-                          Once submitted, your vote is permanently recorded on Ethereum and cannot be changed.
+                          {sandbox ? "The voting contract records your vote on this isolated chain." :
+                            "Once submitted, your vote is permanently recorded on Ethereum and cannot be changed."}
                         </div>
                       </div>
                       <Btn variant="primary" size="lg" onClick={handleVote} disabled={loading||!isAuthorizedVoter}>🗳 Cast Vote</Btn>
@@ -1000,7 +1017,7 @@ export default function App() {
                   </SectionTitle>
                   {hasVoted ? (
                     <div style={{ color:C.green, fontSize:13 }}>
-                      ✅ Your vote has been revealed and counted on Ethereum.
+                      ✅ Your vote has been revealed and counted {sandbox ? "by the sandbox contract." : "on Ethereum."}
                     </div>
                   ) : !hasCommitted ? (
                     <div style={{ color:C.muted, fontSize:13 }}>

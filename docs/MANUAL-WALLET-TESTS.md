@@ -53,7 +53,7 @@ The generated `.votechain-local/session.json` is ignored by Git. Commands verify
 loopback RPC, chain 31337, unforked Hardhat/EDR metadata, node instance ID and code
 hash. A restarted node invalidates the old session. Never expose port 8545 publicly.
 
-Open http://127.0.0.1:5174/ for V2; 5173 remains the separate V1 page. Verify the
+Open http://127.0.0.1:5174/ for the local scheduled-election demo. Verify the
 **LOCAL TEST ONLY** banner. Local mode requires explicit opt-in and development
 mode; it is rejected in production builds. No `.env` is overwritten.
 

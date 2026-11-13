@@ -35,3 +35,6 @@ votingdapp-scrub.git/
 test-results/
 playwright-report/
 crytic-export/
+
+# Private local upgrade handoff; not project documentation for publication
+/LOCAL_UPGRADE_HANDOFF.md

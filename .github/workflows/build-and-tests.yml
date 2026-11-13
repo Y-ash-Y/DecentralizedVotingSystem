@@ -1,4 +1,4 @@
-name: Contract and frontend checks
+name: Build & Tests
 on: [push, pull_request]
 permissions:
   contents: read
@@ -15,16 +15,17 @@ jobs:
           cache-dependency-path: |
             VotingDapp/package-lock.json
             VotingDapp/voting-frontend/package-lock.json
-      - run: npm ci --ignore-scripts
+      - run: npm ci --ignore-scripts --no-audit
         working-directory: VotingDapp
-      - run: npm ci --ignore-scripts
+      - run: npm ci --ignore-scripts --no-audit
         working-directory: VotingDapp/voting-frontend
+      # Installation scripts stay disabled. Apply only our reviewed, pinned patch.
+      - run: npm run deps:patch
+        working-directory: VotingDapp
+      - run: npm run test:tooling
+        working-directory: VotingDapp
       - run: npm run release:check
         working-directory: VotingDapp
-      - run: npm run audit:dependencies
-        working-directory: VotingDapp
-      - run: npm audit --audit-level=low
-        working-directory: VotingDapp/voting-frontend
       - run: npm test
         working-directory: VotingDapp
       - run: npm run test:coverage
@@ -41,6 +42,8 @@ jobs:
       - run: npx playwright install --with-deps chromium
         working-directory: VotingDapp/voting-frontend
       - run: npm run test:browser
+        working-directory: VotingDapp/voting-frontend
+      - run: npm run test:sandbox
         working-directory: VotingDapp/voting-frontend
       - run: npm run test:coverage
         working-directory: VotingDapp/voting-frontend

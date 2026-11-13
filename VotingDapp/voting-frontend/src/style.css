@@ -57,6 +57,17 @@ button:focus-visible, input:focus-visible, textarea:focus-visible, a:focus-visib
   outline: 2px solid #e3b341 !important;
   outline-offset: 3px;
 }
+.sandbox-role {
+  background: var(--surface2);
+  border: 1px solid var(--border);
+  border-radius: 7px;
+  color: var(--text);
+  cursor: pointer;
+  font: inherit;
+  margin-right: 4px;
+  padding: 3px 8px;
+}
+.sandbox-role[aria-pressed="true"] { border-color: var(--gold); color: #f4c95d; }
 @media (max-width: 760px) {
   .app-layout { flex-direction: column; }
   .election-sidebar { width: 100% !important; border-right: 0 !important; border-bottom: 1px solid var(--border); }

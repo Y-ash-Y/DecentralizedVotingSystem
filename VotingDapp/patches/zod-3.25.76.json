@@ -1,0 +1,64 @@
+{
+  "package": "zod",
+  "version": "3.25.76",
+  "scope": "Early rejection for oversized v3 bounded arrays and sets only; no audit exemption.",
+  "files": [
+    {
+      "path": "v3/types.js",
+      "beforeSha256": "9763a2938f0e7f983363ef4bf6530e7583e3f2d54f8a4a6684efad58febc6e8e",
+      "afterSha256": "7b994f7652ae24855e9fe3066de3463f9bfd1083ca7d56d22434942fcddfbffe",
+      "replacements": [
+        {
+          "before": "                    message: def.exactLength.message,\n                });\n                status.dirty();",
+          "after": "                    message: def.exactLength.message,\n                });\n                if (tooBig) return INVALID;\n                status.dirty();"
+        },
+        {
+          "before": "                    message: def.maxLength.message,\n                });\n                status.dirty();",
+          "after": "                    message: def.maxLength.message,\n                });\n                return INVALID;"
+        },
+        {
+          "before": "                    message: def.maxSize.message,\n                });\n                status.dirty();",
+          "after": "                    message: def.maxSize.message,\n                });\n                return INVALID;"
+        }
+      ]
+    },
+    {
+      "path": "v3/types.cjs",
+      "beforeSha256": "06487cc05ed45c5dd29789bf0aa75734d1ce06592a7f2665ba4ca90a68e8a3e1",
+      "afterSha256": "674e29beb1bafb0ac61ad688431322e9397ab9b91272173f19dcf11e310f8e3a",
+      "replacements": [
+        {
+          "before": "                    message: def.exactLength.message,\n                });\n                status.dirty();",
+          "after": "                    message: def.exactLength.message,\n                });\n                if (tooBig) return parseUtil_js_1.INVALID;\n                status.dirty();"
+        },
+        {
+          "before": "                    message: def.maxLength.message,\n                });\n                status.dirty();",
+          "after": "                    message: def.maxLength.message,\n                });\n                return parseUtil_js_1.INVALID;"
+        },
+        {
+          "before": "                    message: def.maxSize.message,\n                });\n                status.dirty();",
+          "after": "                    message: def.maxSize.message,\n                });\n                return parseUtil_js_1.INVALID;"
+        }
+      ]
+    },
+    {
+      "path": "src/v3/types.ts",
+      "beforeSha256": "70309a0877c35d036842e291fe7c8a4439d5db49411d233f8a22bf8a59c41419",
+      "afterSha256": "43e7d808270d2521f9969d81fcddce1df165618483454b72d0c19df98f6e61f3",
+      "replacements": [
+        {
+          "before": "          message: def.exactLength.message,\n        });\n        status.dirty();",
+          "after": "          message: def.exactLength.message,\n        });\n        if (tooBig) return INVALID;\n        status.dirty();"
+        },
+        {
+          "before": "          message: def.maxLength.message,\n        });\n        status.dirty();",
+          "after": "          message: def.maxLength.message,\n        });\n        return INVALID;"
+        },
+        {
+          "before": "          message: def.maxSize.message,\n        });\n        status.dirty();",
+          "after": "          message: def.maxSize.message,\n        });\n        return INVALID;"
+        }
+      ]
+    }
+  ]
+}

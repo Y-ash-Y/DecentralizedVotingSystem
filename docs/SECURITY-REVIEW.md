@@ -31,8 +31,8 @@ enroller can register multiple wallets for one person or exclude eligible people
 | Large event pages crash spread operations | Iterate instead of argument spreading; explicit event and request budgets. 150k-page regression plus 250k synthetic workload. |
 | Mixed/reorganized result snapshots | Pinned-block reads, checkpoint/tip rechecks, stale-request guards and explicit failure display. Service tests. |
 | Aggregate turnout loses integer precision | Sum using BigInt and reject an unsafe display conversion. Regression test. |
-| RPC network name mistaken for identity | Expected chain ID in configuration and pre-deployment checks for V1/V2. Mainnet/mislabeled RPC unit tests. |
-| Local UI relaxation applied to ordinary V2 | Explicit fast-fixture flag plus code-hash/version/marker verification. Real local-EVM integration test. |
+| RPC network name mistaken for identity | Expected chain ID in configuration and pre-deployment checks. Mainnet/mislabeled RPC unit tests. |
+| Local UI relaxation applied to a standard deployment | Explicit fast-fixture flag plus code-hash/version/marker verification. Real local-EVM integration test. |
 | Browser wall clock used for chain scheduling | Creation preflight reads latest block timestamp; contract remains authoritative at inclusion. |
 | Low-contrast badges/notifications | Brighter text colors, keyboard-dismissable status notification; isolated browser/axe checks. |
 | Extra external font request | Removed the remote font import; system fallback fonts. This does not hide RPC/wallet traffic. |
@@ -53,9 +53,9 @@ exit status when warnings exist, so this is not described as a warning-free scan
 | timestamp (low) | 3 | Intentional schedule comparisons. Chain time is not a perfect wall clock; delayed inclusion and deadline misses remain real risks. Not randomness. |
 | dead-code (informational) | 1 | `minimumPhaseDuration` is called by creation and overridden by the local fixture. Standard vs fast timing tests demonstrate use; retain the hook. |
 | solc-version (informational) | 1 | Compiler pinned to 0.8.20. Review compiler issues before any new public deployment; warning is not suppressed. |
-| naming-convention (informational) | 26 | Legacy underscore-prefixed parameter names. No authorization impact; keep V1 source compatibility. |
-| unindexed-event-address (informational) | 5 | Legacy ABI limitation. V1 event scanner filters client-side; the current contract uses indexed addresses. Do not silently change V1 ABI. |
-| immutable-states (optimization) | 1 | V1 owner could be immutable in a new design; not a correctness defect. V2 supports explicit transfer. |
+| naming-convention (informational) | 26 | Underscore-prefixed parameter names in the manual-phase contract. No authorization impact. |
+| unindexed-event-address (informational) | 5 | The manual-phase contract's events require client-side filtering. The scheduled contract uses indexed addresses. |
+| immutable-states (optimization) | 1 | The manual-phase contract's owner could be immutable. The scheduled contract supports explicit ownership transfer. |
 
 An initial medium warning about the local `visible` boolean was addressed with
 an explicit `false` initializer. Solidity already defaults a bool to false, so
@@ -69,12 +69,12 @@ patterns were not found. Newer compiler bug entries also reinforce why a scanner
 embedded list is not exhaustive. This is a source/configuration assessment, not
 a blanket compiler safety waiver. See the [official Solidity bug catalog](https://docs.soliditylang.org/en/latest/bugs.html).
 
-## Dependency advisory disposition — remediated locally
+## Dependency advisory history
 
-The reviewed Hardhat 3 / ethers 6 migration replaces the legacy dependency tree.
-Both parent and frontend lockfiles report **0 known npm advisories**, including
-development dependencies. Earlier counts (28 affected entries: 16 low, 4 moderate,
-8 high) are superseded. No forced upgrade or advisory-suppressing override was used.
+The October verification reported **0 known npm advisories** for the contract
+and frontend lockfiles, including development dependencies. The contract
+tooling now has an open Zod advisory. See [dependency status](DEPENDENCIES.md)
+for current results.
 
 Validation includes clean installation, all normal tests, native contract coverage,
 both deployment smoke tests, current gas fixtures and ABI checks, and isolated demo bootstrap/status/phase/overwrite-refusal checks.
@@ -91,8 +91,8 @@ possible. Use dedicated testnet credentials; do not expose the simulator publicl
    choice and secret. A gated getter does not hide a tally. No national/binding
    election claim is supportable, even if all existing tests pass.
 2. **Centralized enrollment/governance:** no uniqueness proof, audited registration
-   process, multisig policy or timelock. Owner transfer exists in V2's contract,
-   but has no dedicated frontend workflow.
+   process, multisig policy or timelock. The scheduled contract supports ownership
+   transfer. The frontend has no dedicated workflow for it.
 3. **Secret custody:** browser/download backups are plaintext. XSS, malicious
    extensions, shared devices, storage loss and two-tab races remain risks.
    React escapes displayed strings, but no end-to-end XSS or hosting-CSP audit
@@ -110,9 +110,10 @@ possible. Use dedicated testnet credentials; do not expose the simulator publicl
 7. **Unicode and scale:** names are byte-limited, not normalized identities;
    visually similar names are possible. Batches cap at 50 and candidates at 100;
    no production voter-load validation exists.
-8. **Legacy V1:** no schedule enforcement, full eligibility freeze, ownership
-   recovery, or V2 domain binding. Those deployed semantics cannot be repaired
-   by changing a browser. Keep old reveals available during any eventual migration.
+8. **Manual-phase deployments:** these do not enforce the schedule or provide the
+   same eligibility freeze, ownership recovery or commitment domain binding as
+   the scheduled contract. Existing commitments must be revealed at their
+   original deployment.
 9. **Storage namespace:** legacy backup keys omit chain ID. The default local
    demo uses a separate origin; migrating to one shared origin needs explicit
    versioned backup migration and recovery testing.
