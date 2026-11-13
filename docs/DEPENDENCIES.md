@@ -1,7 +1,9 @@
 # Dependency verification — November 2026
 
-CI runs verification and dependency audits independently. Either audit fails
-the workflow on a known advisory of low severity or higher.
+CI runs [Build & Tests](../.github/workflows/build-and-tests.yml) and
+[Dependency Audit](../.github/workflows/dependency-audit.yml) as separate
+workflows. Either audit fails Dependency Audit on a known advisory of low
+severity or higher.
 
 ## Tooling and mitigation
 

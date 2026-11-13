@@ -1,4 +1,4 @@
-name: Contract and frontend checks
+name: Build & Tests
 on: [push, pull_request]
 permissions:
   contents: read
@@ -15,9 +15,9 @@ jobs:
           cache-dependency-path: |
             VotingDapp/package-lock.json
             VotingDapp/voting-frontend/package-lock.json
-      - run: npm ci --ignore-scripts
+      - run: npm ci --ignore-scripts --no-audit
         working-directory: VotingDapp
-      - run: npm ci --ignore-scripts
+      - run: npm ci --ignore-scripts --no-audit
         working-directory: VotingDapp/voting-frontend
       # Installation scripts stay disabled. Apply only our reviewed, pinned patch.
       - run: npm run deps:patch
@@ -55,22 +55,3 @@ jobs:
         working-directory: VotingDapp
       - run: npm run benchmark:v2
         working-directory: VotingDapp
-  audit:
-    name: Dependency audit (${{ matrix.package }})
-    runs-on: ubuntu-latest
-    timeout-minutes: 15
-    strategy:
-      fail-fast: false
-      matrix:
-        include:
-          - package: contracts
-            directory: VotingDapp
-          - package: frontend
-            directory: VotingDapp/voting-frontend
-    steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
-        with:
-          node-version-file: .nvmrc
-      - run: npm audit --audit-level=low
-        working-directory: ${{ matrix.directory }}

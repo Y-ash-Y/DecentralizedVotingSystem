@@ -6,6 +6,8 @@
 [Architecture](docs/ENGINEERING.md) · [Verification](docs/VERIFICATION.md) ·
 [Security review](docs/SECURITY-REVIEW.md)
 
+[![Build & Tests on main](https://github.com/Y-ash-Y/DecentralizedVotingSystem/actions/workflows/build-and-tests.yml/badge.svg?branch=main&event=push)](https://github.com/Y-ash-Y/DecentralizedVotingSystem/actions/workflows/build-and-tests.yml?query=branch%3Amain)
+
 VoteChain pairs a React interface with Solidity contracts. Administrators
 register candidates and enroll voter wallets, then seal the election before
 it starts. Eligible voters can cast a public ballot or commit to a choice and
@@ -62,9 +64,9 @@ reduction** in the controlled local benchmark. See the
 
 The test suite covers the contract and local EVM, frontend services, wallet and
 receipt handling, browser layouts, and an end-to-end election through the
-browser sandbox. CI reports verification, the contract dependency audit, and
-the frontend dependency audit separately.
-[Reference GitHub Actions run](https://github.com/Y-ash-Y/DecentralizedVotingSystem/actions/runs/43229873828).
+browser sandbox. The **Build & Tests** badge tracks verification on `main`.
+The [Dependency Audit workflow](https://github.com/Y-ash-Y/DecentralizedVotingSystem/actions/workflows/dependency-audit.yml)
+reports contract and frontend dependency findings separately.
 
 Use the Node.js version pinned in [`.nvmrc`](.nvmrc). Install both packages
 and apply the reviewed contract-tooling patch.

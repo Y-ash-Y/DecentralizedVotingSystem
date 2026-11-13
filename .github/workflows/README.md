@@ -1,14 +1,16 @@
 # Continuous integration
 
-[ci.yml](ci.yml) uses the root Node version and both committed npm lockfiles. It
-checks publication candidates, dependency advisories, contracts, coverage,
-frontend services/UI/browser behavior, builds, local deployment and benchmarks.
+[Build & Tests](build-and-tests.yml) uses the pinned Node version and both npm
+lockfiles. It checks publication candidates, contracts, frontend services and
+browser behavior, coverage, builds, local deployment, and benchmarks. It
+applies the pinned Zod v3 mitigation after installing dependencies with
+lifecycle scripts disabled and runs the patch's regression tests.
 
-The verification job applies the pinned Zod v3 mitigation after script-disabled
-installation and runs its tooling tests. Independent dependency audit jobs scan
-each lockfile at `--audit-level=low`. An audit failure leaves the other audit and
-the verification job running, but still fails the workflow. The local backport
-does not clear the version-based advisory or permit a release.
+[Dependency Audit](dependency-audit.yml) scans both lockfiles at
+`--audit-level=low`. Either audit can fail the audit workflow, and each job
+reports its own result. The Build & Tests workflow and its badge track
+verification independently. See the [dependency notes](../../docs/DEPENDENCIES.md)
+for the open advisory and the scope of the local mitigation.
 
 Contract tests, deployment smoke and gas measurements explicitly use the
 simulated Hardhat network. No personal wallet, secret RPC credential or testnet
