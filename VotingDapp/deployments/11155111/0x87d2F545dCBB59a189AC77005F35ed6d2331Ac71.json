@@ -1,0 +1,11 @@
+{
+  "protocolVersion": 2,
+  "chainId": 11155111,
+  "address": "0x87d2F545dCBB59a189AC77005F35ed6d2331Ac71",
+  "deploymentBlock": 12127923,
+  "transactionHash": "0xb8e1508a8d991fbfdf9fd25ebe28a9394bd360668a6028198d226daa538ffc1f",
+  "runtimeCodeHash": "0x369b26f5d2a52fd0942d22ed9d0aca218e38d2ada72e8dbcc0959da628ac138f",
+  "abiHash": "0xff3e0d692e54bece07a7ec3ebf294446f1a77cfb3d8093780a3e5d2e46f5d414",
+  "compiler": "0.8.20+commit.a1b79de6",
+  "network": "sepolia"
+}
